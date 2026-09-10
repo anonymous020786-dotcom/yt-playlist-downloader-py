@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import re
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Original display name -> (locale code, English name, native name, rtl)
@@ -38,7 +37,7 @@ LANGUAGES = {
 }
 
 KEY_RE = re.compile(r'x:Key="([^"]+)"')
-VALUE_RE = re.compile(r'>(.*?)</(?:s:String|FlowDirection|HorizontalAlignment)>', re.S)
+VALUE_RE = re.compile(r'>(.*?)</(?:s:String|FlowDirection|HorizontalAlignment)>', re.DOTALL)
 
 
 def parse_xaml(path: Path) -> dict[str, str]:
@@ -48,7 +47,7 @@ def parse_xaml(path: Path) -> dict[str, str]:
     entry_re = re.compile(
         r'<(?:s:String|FlowDirection|HorizontalAlignment)\s+x:Key="([^"]+)"\s*>(.*?)'
         r'</(?:s:String|FlowDirection|HorizontalAlignment)>',
-        re.S,
+        re.DOTALL,
     )
     for key, value in entry_re.findall(text):
         out[key] = _unescape(value)

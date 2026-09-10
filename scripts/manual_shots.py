@@ -15,8 +15,8 @@ app = QApplication(sys.argv)
 from ytpdl.core.models import ResolvedSource, SourceKind, VideoInfo
 from ytpdl.core.settings import SettingsStore
 from ytpdl.i18n import translator
-from ytpdl.ui.theme import apply_theme
 from ytpdl.ui.main_window import MainWindow
+from ytpdl.ui.theme import apply_theme
 
 s = SettingsStore()
 s.app.check_for_updates = False

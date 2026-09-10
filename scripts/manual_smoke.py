@@ -7,15 +7,15 @@ import sys
 
 faulthandler.dump_traceback_later(25, exit=True)
 
-from PySide6.QtCore import QTimer  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication
 
 app = QApplication(sys.argv)
 print("qapp ok", flush=True)
 
-from ytpdl.core.settings import SettingsStore  # noqa: E402
-from ytpdl.i18n import translator  # noqa: E402
-from ytpdl.ui.theme import apply_theme  # noqa: E402
+from ytpdl.core.settings import SettingsStore
+from ytpdl.i18n import translator
+from ytpdl.ui.theme import apply_theme
 
 settings = SettingsStore()
 settings.app.check_for_updates = False  # don't hit the network in the test
@@ -24,7 +24,7 @@ translator.set_locale(settings.app.language)
 apply_theme(app, settings.app.theme, settings.app.accent)
 print("theme ok", flush=True)
 
-from ytpdl.ui.main_window import MainWindow  # noqa: E402
+from ytpdl.ui.main_window import MainWindow
 
 win = MainWindow(settings)
 win.show()

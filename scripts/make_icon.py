@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPixmap
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QApplication
 
 app = QApplication([])
