@@ -1,0 +1,86 @@
+[
+  {
+    "code": "en",
+    "english_name": "English",
+    "native_name": "English",
+    "rtl": false
+  },
+  {
+    "code": "de",
+    "english_name": "German",
+    "native_name": "Deutsch",
+    "rtl": false
+  },
+  {
+    "code": "nl",
+    "english_name": "Dutch",
+    "native_name": "Nederlands",
+    "rtl": false
+  },
+  {
+    "code": "es",
+    "english_name": "Spanish",
+    "native_name": "Español",
+    "rtl": false
+  },
+  {
+    "code": "fr",
+    "english_name": "French",
+    "native_name": "Français",
+    "rtl": false
+  },
+  {
+    "code": "it",
+    "english_name": "Italian",
+    "native_name": "Italiano",
+    "rtl": false
+  },
+  {
+    "code": "pl",
+    "english_name": "Polish",
+    "native_name": "Polski",
+    "rtl": false
+  },
+  {
+    "code": "pt_BR",
+    "english_name": "Portuguese (Brazil)",
+    "native_name": "Português (BR)",
+    "rtl": false
+  },
+  {
+    "code": "ro",
+    "english_name": "Romanian",
+    "native_name": "Română",
+    "rtl": false
+  },
+  {
+    "code": "tr",
+    "english_name": "Turkish",
+    "native_name": "Türkçe",
+    "rtl": false
+  },
+  {
+    "code": "ru",
+    "english_name": "Russian",
+    "native_name": "Русский",
+    "rtl": false
+  },
+  {
+    "code": "he",
+    "english_name": "Hebrew",
+    "native_name": "עברית",
+    "rtl": true
+  },
+  {
+    "code": "ar",
+    "english_name": "Arabic",
+    "native_name": "العربية",
+    "rtl": true
+  },
+  {
+    "code": "zh",
+    "english_name": "Chinese",
+    "native_name": "中文",
+    "rtl": false
+  }
+]

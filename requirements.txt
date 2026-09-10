@@ -1,0 +1,4 @@
+PySide6-Essentials>=6.7
+yt-dlp>=2024.8
+mutagen>=1.47
+requests>=2.31
