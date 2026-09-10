@@ -66,6 +66,20 @@ pyinstaller ytpdl.spec
 The result lands in `dist/YouTube Playlist Downloader/`. Drop an `ffmpeg` binary
 next to the executable (or in `bin/`) and it will be picked up automatically.
 
+### Windows installer
+
+With [Inno Setup 6](https://jrsoftware.org/isdl.php) installed:
+
+```bash
+ISCC installer\ytpdl.iss
+```
+
+produces `installer\Output\YouTube-Playlist-Downloader-Setup-<ver>.exe` — a
+per-user installer (no admin needed; can elevate to Program Files), Start-menu
+and optional desktop shortcuts, an "install FFmpeg via winget" checkbox, and an
+uninstaller registered in Add/Remove Programs. Build the PyInstaller folder
+first. The installer is unsigned, so SmartScreen warns on first run.
+
 ## Project layout
 
 ```
@@ -89,6 +103,8 @@ ytpdl/
     main_window.py     nav rail + stacked pages, tray, notifications, shortcuts
     pages/             home, queue, subscriptions, settings, help, about
     widgets/           download-options form, queue row, async thumbnail, toast
+
+installer/ytpdl.iss              Inno Setup script for the Windows installer
 
 scripts/convert_languages.py     one-shot .xaml -> .json locale importer
 scripts/translations_extra.py    translations for new UI strings (13 locales)
