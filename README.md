@@ -19,10 +19,12 @@ videos, convert them, tag them — rebuilt on **yt-dlp + FFmpeg** with a modern
 | **Filenames** | Template tokens: `$title $index $artist $songtitle $channel $playlist $genre $videoid` |
 | **Selection** | Per-item checkable list for playlists/channels, plus item range (subset) and a duration filter (shorter/longer than N minutes), skip files that already exist |
 | **Queue** | Concurrent downloads (configurable), pause / resume / cancel / retry per job, "open folder", and **unfinished downloads are offered for resume on next launch** |
-| **Subscriptions** | Track channels/playlists, "check now" diffs against last seen, one-click download of new uploads |
-| **UI** | Light / Dark / follow-system themes, 20+ accent colours, 14 languages (imported from the original) incl. RTL for Arabic & Hebrew |
+| **Subscriptions** | Track channels/playlists; manual or background auto-check on an interval; new uploads auto-queue |
+| **Queue survival** | Unfinished jobs are saved on exit and offered for resume next launch |
+| **Tray** | Minimises to the system tray while downloading; desktop notification when the queue finishes |
+| **UI** | Light / Dark / follow-system themes, 20+ accent colours, **14 fully-translated languages** incl. RTL for Arabic & Hebrew, Help page |
 | **Updates** | Checks the GitHub releases API and points you at the new version |
-| **Convenience** | Drag a link onto the window, paste button, live "Analyzing…" as you type |
+| **Convenience** | Drag a link onto the window, paste button, live "Analyzing…" as you type, `Ctrl+1…6` / `Ctrl+L` shortcuts, remembers window size |
 
 ## Install & run
 
@@ -84,11 +86,15 @@ ytpdl/
     updater.py         GitHub release check
   ui/
     theme.py           light/dark QSS built from a palette + accent
-    main_window.py     nav rail + stacked pages, wiring pages to the queue
-    pages/             home, queue, subscriptions, settings, about
+    main_window.py     nav rail + stacked pages, tray, notifications, shortcuts
+    pages/             home, queue, subscriptions, settings, help, about
     widgets/           download-options form, queue row, async thumbnail, toast
 
-scripts/convert_languages.py   one-shot .xaml -> .json locale importer
+scripts/convert_languages.py     one-shot .xaml -> .json locale importer
+scripts/translations_extra.py    translations for new UI strings (13 locales)
+scripts/merge_translations.py    folds the above into the locale JSON files
+scripts/make_icon.py             regenerates resources/app.png + app.ico
+scripts/manual_*.py              headless smoke test / screenshots / a real download
 ```
 
 ## Notes on parity with the original
@@ -99,9 +105,10 @@ scripts/convert_languages.py   one-shot .xaml -> .json locale importer
 * yt-dlp replaces the hand-rolled `YoutubeExplode` stream selection and the manual
   FFmpeg process orchestration — quality/FPS/language preferences map onto its
   `format_sort`.
-* All 14 translations were imported verbatim from the WPF resource dictionaries;
-  new strings introduced by the redesigned UI currently fall back to English until
-  translated.
+* All 14 original translations were imported verbatim from the WPF resource
+  dictionaries; the ~70 strings the redesigned UI added are translated into every
+  locale too (`scripts/translations_extra.py`), with an English fallback net for
+  anything that slips through.
 
 ## Licence
 
