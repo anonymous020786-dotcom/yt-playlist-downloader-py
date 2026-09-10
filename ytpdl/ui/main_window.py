@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -75,8 +75,12 @@ class MainWindow(QMainWindow):
             self._stack.addWidget(page)
 
         self._toast = Toast(self)
+        self._sub_timer = QTimer(self)
+        self._sub_timer.timeout.connect(self._subs_page.check_all)
         self._wire()
+        self._install_shortcuts()
         self._select(0)
+        self._sync_subscription_timer()
 
         QTimer.singleShot(200, self._offer_restore)
         if settings.app.check_for_updates:
@@ -122,6 +126,8 @@ class MainWindow(QMainWindow):
         self._subs_page.toast.connect(self._toast.show_message)
         self._settings_page.theme_changed.connect(self._apply_theme)
         self._settings_page.language_changed.connect(self._on_language_changed)
+        self._settings_page.concurrency_changed.connect(self._queue.set_concurrency)
+        self._settings_page.subscriptions_changed.connect(self._sync_subscription_timer)
 
         self._queue.job_added.connect(lambda _j: self._refresh_badge())
         self._queue.job_removed.connect(lambda _j: self._refresh_badge())
@@ -129,6 +135,18 @@ class MainWindow(QMainWindow):
         self._queue.job_finished.connect(self._on_job_finished)
 
         translator.locale_changed.connect(self._retranslate)
+
+    def _install_shortcuts(self) -> None:
+        for i in range(len(_NAV)):
+            sc = QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self)
+            sc.activated.connect(lambda idx=i: self._select(idx))
+        focus = QShortcut(QKeySequence("Ctrl+L"), self)
+        focus.activated.connect(self._focus_search)
+
+    def _focus_search(self) -> None:
+        self._select(0)
+        self._home._search.setFocus()
+        self._home._search.selectAll()
 
     # ------------------------------------------------------------------ slots
     def _select(self, index: int) -> None:
@@ -158,6 +176,14 @@ class MainWindow(QMainWindow):
             if job.settings.open_folder_when_done:
                 self._queue_page._open_folder(job_id)
         self._refresh_badge()
+
+    def _sync_subscription_timer(self) -> None:
+        app = self._settings.app
+        self._subs_page.set_auto_download(app.check_subscriptions)
+        if app.check_subscriptions and self._subs.items:
+            self._sub_timer.start(max(5, app.subscription_interval_minutes) * 60_000)
+        else:
+            self._sub_timer.stop()
 
     def _refresh_badge(self) -> None:
         active = self._queue.active_count()

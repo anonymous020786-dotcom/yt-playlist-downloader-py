@@ -46,8 +46,13 @@ class SubscriptionsPage(QWidget):
         self._store = store
         self._pool = QThreadPool.globalInstance()
         self._rows: dict[str, QFrame] = {}
+        #: when True, a check that finds new uploads queues them automatically
+        self._auto_download = False
         self._build()
         self._reload()
+
+    def set_auto_download(self, enabled: bool) -> None:
+        self._auto_download = enabled
 
     def _build(self) -> None:
         root = QVBoxLayout(self)
@@ -163,6 +168,10 @@ class SubscriptionsPage(QWidget):
         self._pool.start(task)
 
     def _check_all_now(self) -> None:
+        self.check_all()
+
+    def check_all(self) -> None:
+        """Refresh every subscription (also called by the background timer)."""
         for sub in self._store.items:
             self._check(sub)
 
@@ -179,7 +188,9 @@ class SubscriptionsPage(QWidget):
         if error:
             self.toast.emit(f"{tr('Error')}: {error}")
         elif new_count:
-            self.toast.emit(tr("NewVideos", count=new_count))
+            self.toast.emit(f"{sub.title or sub.url}: {tr('NewVideos', count=new_count)}")
+            if self._auto_download:
+                self._download(sub)
 
     def _download(self, sub: Subscription) -> None:
         self.download_requested.emit(sub.url)

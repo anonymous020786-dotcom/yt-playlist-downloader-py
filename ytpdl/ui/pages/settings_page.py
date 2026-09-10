@@ -6,9 +6,12 @@ from PySide6.QtCore import QThreadPool, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -26,6 +29,8 @@ from ..workers import UpdateWorker
 class SettingsPage(QWidget):
     theme_changed = Signal()
     language_changed = Signal(str)
+    concurrency_changed = Signal(int)
+    subscriptions_changed = Signal()
 
     def __init__(self, settings: SettingsStore) -> None:
         super().__init__()
@@ -78,12 +83,32 @@ class SettingsPage(QWidget):
         for b in ("chrome", "firefox", "edge", "brave", "chromium", "opera", "vivaldi", "safari"):
             self.cookies.addItem(b.capitalize(), b)
 
+        self.save_dir = QLineEdit()
+        self.save_dir.setReadOnly(True)
+        browse = QPushButton(tr("Browse"))
+        browse.clicked.connect(self._pick_folder)
+        dir_row = QHBoxLayout()
+        dir_row.addWidget(self.save_dir, 1)
+        dir_row.addWidget(browse)
+
         downloads = QFormLayout()
         downloads.setSpacing(10)
+        downloads.addRow(QLabel(tr("SaveDirectory")), dir_row)
         downloads.addRow(QLabel(tr("ConcurrentDownloads")), self.concurrency)
         downloads.addRow(QLabel(tr("RateLimit")), self.rate_limit)
         downloads.addRow(QLabel(tr("CookiesFromBrowser")), self.cookies)
         col.addWidget(_section(tr("Downloads"), downloads))
+
+        # -- subscriptions --------------------------------------------
+        self.check_subs = QCheckBox(tr("AutomaticllyDownloadSubscriptions"))
+        self.sub_interval = QSpinBox()
+        self.sub_interval.setRange(5, 1440)
+        self.sub_interval.setSuffix(f" {tr('Minutes')}")
+        subs = QFormLayout()
+        subs.setSpacing(10)
+        subs.addRow(self.check_subs)
+        subs.addRow(QLabel(tr("SubscriptionsUpdateDelay")), self.sub_interval)
+        col.addWidget(_section(tr("Subscriptions"), subs))
 
         # -- general -------------------------------------------------
         self.save_options = QCheckBox(tr("SaveDownloadOptions"))
@@ -124,13 +149,15 @@ class SettingsPage(QWidget):
         self.save_options.setChecked(a.save_download_options)
         self.confirm_exit.setChecked(a.confirm_on_exit)
         self.check_updates.setChecked(a.check_for_updates)
+        self.save_dir.setText(a.save_directory)
+        self.check_subs.setChecked(a.check_subscriptions)
+        self.sub_interval.setValue(a.subscription_interval_minutes)
 
     def _wire(self) -> None:
         self.theme.currentIndexChanged.connect(self._apply_theme)
         self.accent.currentIndexChanged.connect(self._apply_theme)
         self.language.currentIndexChanged.connect(self._apply_language)
-        self.concurrency.valueChanged.connect(
-            lambda v: setattr(self._settings.app, "concurrent_downloads", v))
+        self.concurrency.valueChanged.connect(self._set_concurrency)
         self.rate_limit.valueChanged.connect(
             lambda v: setattr(self._settings.app, "rate_limit_kib", v))
         self.cookies.currentIndexChanged.connect(
@@ -141,10 +168,32 @@ class SettingsPage(QWidget):
             lambda v: setattr(self._settings.app, "confirm_on_exit", v))
         self.check_updates.toggled.connect(
             lambda v: setattr(self._settings.app, "check_for_updates", v))
+        self.check_subs.toggled.connect(self._set_check_subs)
+        self.sub_interval.valueChanged.connect(self._set_sub_interval)
         self.update_btn.clicked.connect(self.run_update_check)
         self.restore_btn.clicked.connect(self._restore)
 
     # ------------------------------------------------------------------ slots
+    def _set_concurrency(self, value: int) -> None:
+        self._settings.app.concurrent_downloads = value
+        self.concurrency_changed.emit(value)
+
+    def _set_check_subs(self, on: bool) -> None:
+        self._settings.app.check_subscriptions = on
+        self.subscriptions_changed.emit()
+
+    def _set_sub_interval(self, value: int) -> None:
+        self._settings.app.subscription_interval_minutes = value
+        self.subscriptions_changed.emit()
+
+    def _pick_folder(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(
+            self, tr("SaveDirectory"), self._settings.app.save_directory
+        )
+        if chosen:
+            self._settings.app.save_directory = chosen
+            self._settings.download.save_path = chosen
+            self.save_dir.setText(chosen)
     def _apply_theme(self) -> None:
         self._settings.app.theme = self.theme.currentData()
         self._settings.app.accent = self.accent.currentData()
@@ -178,7 +227,7 @@ class SettingsPage(QWidget):
 
 
 def _section(title: str, inner) -> QWidget:
-    box = QWidget()
+    box = QFrame()
     box.setObjectName("Card")
     lay = QVBoxLayout(box)
     lay.setContentsMargins(18, 16, 18, 16)
