@@ -37,6 +37,7 @@ class QueueItem(QFrame):
     def __init__(self, job: DownloadJob) -> None:
         super().__init__()
         self.job_id = job.job_id
+        self._job = job
         self.setObjectName("QueueRow")
         self._build(job)
         self.set_state(job.state)
@@ -69,6 +70,7 @@ class QueueItem(QFrame):
 
         self.status = QLabel("")
         self.status.setObjectName("Dim")
+        self.status.setWordWrap(True)
         mid.addWidget(self.status)
         outer.addLayout(mid, 1)
 
@@ -115,6 +117,21 @@ class QueueItem(QFrame):
         self.style().unpolish(self)
         self.style().polish(self)
         self.status.setText(tr(_STATE_KEY.get(state, "Ready")))
+        self.status.setToolTip("")
+
+        if state == JobState.FAILED:
+            detail = self._job.error or "; ".join(
+                f"{n}: {r}" for n, r in self._job.not_downloaded[:8]
+            )
+            if detail:
+                self.status.setText(f"{tr('Failed')} — {detail[:200]}")
+                self.status.setToolTip(detail)
+        elif state == JobState.COMPLETED and self._job.not_downloaded:
+            skipped = len(self._job.not_downloaded)
+            self.status.setText(f"{tr('Completed')} · {skipped} {tr('Failed').lower()}")
+            self.status.setToolTip(
+                "\n".join(f"{n}: {r}" for n, r in self._job.not_downloaded)
+            )
 
         if state == JobState.RUNNING:
             self.btn_primary.setText(tr("Pause"))

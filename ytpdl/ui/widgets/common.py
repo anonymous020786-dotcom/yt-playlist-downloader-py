@@ -4,7 +4,9 @@ and a transient toast overlay.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QPixmap
@@ -18,8 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ... import config
+
 log = logging.getLogger(__name__)
 _pool = QThreadPool.globalInstance()
+_THUMB_CACHE = config.APP_DATA_DIR / "thumb_cache"
 
 
 def card(*children: QWidget, spacing: int = 14, margins: tuple[int, int, int, int] = (18, 18, 18, 18)) -> QFrame:
@@ -73,8 +78,12 @@ def row(*widgets: QWidget, spacing: int = 8, stretch_last: bool = False) -> QWid
 
 
 # --------------------------------------------------------------------------- #
-#  Async thumbnail
+#  Async thumbnail (with a small on-disk cache)
 # --------------------------------------------------------------------------- #
+def _cache_path(url: str) -> Path:
+    return _THUMB_CACHE / hashlib.sha1(url.encode("utf-8")).hexdigest()
+
+
 class _FetchSignals(QObject):
     done = Signal(bytes)
 
@@ -86,11 +95,24 @@ class _FetchTask(QRunnable):
         self.signals = _FetchSignals()
 
     def run(self) -> None:
+        cache = _cache_path(self.url)
+        try:
+            data = cache.read_bytes()
+            if data:
+                self.signals.done.emit(data)
+                return
+        except OSError:
+            pass
         try:
             import requests
 
             resp = requests.get(self.url, timeout=10)
             resp.raise_for_status()
+            try:
+                _THUMB_CACHE.mkdir(parents=True, exist_ok=True)
+                cache.write_bytes(resp.content)
+            except OSError:
+                pass
             self.signals.done.emit(resp.content)
         except Exception as exc:  # noqa: BLE001
             log.debug("thumbnail fetch failed: %s", exc)

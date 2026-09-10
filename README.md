@@ -112,6 +112,6 @@ scripts/manual_*.py              headless smoke test / screenshots / a real down
 
 ## Licence
 
-GPL-3.0-or-later, matching the upstream project.
+Apache-2.0, matching the upstream project. See [LICENSE](LICENSE).
 
 [orig]: https://github.com/shaked6540/YoutubePlaylistDownloader
