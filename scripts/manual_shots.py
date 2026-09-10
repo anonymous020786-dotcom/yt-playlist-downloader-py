@@ -47,7 +47,7 @@ fake = ResolvedSource(
     ],
 )
 
-seq = iter(["home", "resolved", "light", "queue", "settings", "about", "rtl", "done"])
+seq = iter(["home", "resolved", "light", "queue", "settings", "help", "about", "rtl", "done"])
 state = {"cur": next(seq)}
 
 
@@ -69,8 +69,11 @@ def step():
     elif cur == "settings":
         w._select(3)
         w.grab().save("scripts/_settings.png")
-    elif cur == "about":
+    elif cur == "help":
         w._select(4)
+        w.grab().save("scripts/_help.png")
+    elif cur == "about":
+        w._select(5)
         w.grab().save("scripts/_about.png")
     elif cur == "rtl":
         translator.set_locale("ar")

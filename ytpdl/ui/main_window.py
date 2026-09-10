@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer
-from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QButtonGroup,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -23,6 +26,7 @@ from ..core.settings import SettingsStore
 from ..core.subscriptions import SubscriptionStore
 from ..i18n import tr, translator
 from .pages.about_page import AboutPage
+from .pages.help_page import HelpPage
 from .pages.home_page import HomePage
 from .pages.queue_page import QueuePage
 from .pages.settings_page import SettingsPage
@@ -36,6 +40,7 @@ _NAV = [
     ("Queue", "⬇"),
     ("Subscriptions", "🔔"),
     ("Settings", "⚙"),
+    ("Help", "❔"),
     ("About", "ℹ"),
 ]
 
@@ -47,10 +52,10 @@ class MainWindow(QMainWindow):
         self._pool = QThreadPool.globalInstance()
         self._queue = DownloadQueue(settings)
         self._subs = SubscriptionStore()
+        self._quitting = False
 
         self.setWindowTitle(config.APP_NAME)
-        self.resize(1100, 760)
-        self.setMinimumSize(880, 600)
+        self._restore_geometry()
 
         root = QWidget()
         root.setObjectName("Root")
@@ -69,14 +74,16 @@ class MainWindow(QMainWindow):
         self._queue_page = QueuePage(self._queue)
         self._subs_page = SubscriptionsPage(self._subs)
         self._settings_page = SettingsPage(settings)
+        self._help_page = HelpPage()
         self._about_page = AboutPage()
         for page in (self._home, self._queue_page, self._subs_page,
-                     self._settings_page, self._about_page):
+                     self._settings_page, self._help_page, self._about_page):
             self._stack.addWidget(page)
 
         self._toast = Toast(self)
         self._sub_timer = QTimer(self)
         self._sub_timer.timeout.connect(self._subs_page.check_all)
+        self._tray = self._build_tray()
         self._wire()
         self._install_shortcuts()
         self._select(0)
@@ -118,6 +125,25 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._queue_badge)
         return rail
 
+    def _build_tray(self) -> QSystemTrayIcon | None:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return None
+        icon = QIcon(str(config.ICON_FILE)) if config.ICON_FILE.exists() else self.windowIcon()
+        tray = QSystemTrayIcon(icon, self)
+        tray.setToolTip(config.APP_NAME)
+        menu = QMenu()
+        show_action = QAction(tr("Home"), self)
+        show_action.triggered.connect(self._show_from_tray)
+        quit_action = QAction(tr("Exit"), self)
+        quit_action.triggered.connect(self._quit_from_tray)
+        menu.addAction(show_action)
+        menu.addSeparator()
+        menu.addAction(quit_action)
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._on_tray_activated)
+        tray.show()
+        return tray
+
     # ------------------------------------------------------------------- wire
     def _wire(self) -> None:
         self._home.queue_requested.connect(self._on_queue_requested)
@@ -133,6 +159,7 @@ class MainWindow(QMainWindow):
         self._queue.job_removed.connect(lambda _j: self._refresh_badge())
         self._queue.job_state_changed.connect(lambda *_a: self._refresh_badge())
         self._queue.job_finished.connect(self._on_job_finished)
+        self._queue.queue_idle.connect(self._on_queue_idle)
 
         translator.locale_changed.connect(self._retranslate)
 
@@ -151,8 +178,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ slots
     def _select(self, index: int) -> None:
         self._stack.setCurrentIndex(index)
-        btn = self._nav_buttons[index]
-        btn.setChecked(True)
+        self._nav_buttons[index].setChecked(True)
 
     def _on_queue_requested(self, sources: list) -> None:
         self._queue.enqueue_many(sources)
@@ -177,6 +203,17 @@ class MainWindow(QMainWindow):
                 self._queue_page._open_folder(job_id)
         self._refresh_badge()
 
+    def _on_queue_idle(self) -> None:
+        """Every download finished — notify if the window isn't focused."""
+        if self._tray and not self.isActiveWindow():
+            done = sum(1 for j in self._queue.jobs() if j.state.value == "completed")
+            self._tray.showMessage(
+                config.APP_NAME,
+                f"{tr('AllDone')} ({done})",
+                QSystemTrayIcon.MessageIcon.Information,
+                4000,
+            )
+
     def _sync_subscription_timer(self) -> None:
         app = self._settings.app
         self._subs_page.set_auto_download(app.check_subscriptions)
@@ -191,23 +228,26 @@ class MainWindow(QMainWindow):
         self._nav_buttons[1].setText(
             f"  ⬇   {tr('Queue')}" + (f"  ({active})" if active else "")
         )
+        if self._tray:
+            self._tray.setToolTip(
+                f"{config.APP_NAME} — {active} {tr('Downloading').lower()}"
+                if active else config.APP_NAME
+            )
 
     def _apply_theme(self) -> None:
-        from PySide6.QtWidgets import QApplication
-
         apply_theme(QApplication.instance(), self._settings.app.theme, self._settings.app.accent)
 
     def _on_language_changed(self, code: str) -> None:
-        from PySide6.QtWidgets import QApplication
-
         translator.set_locale(code)
-        app = QApplication.instance()
-        app.setLayoutDirection(Qt.RightToLeft if translator.is_rtl else Qt.LeftToRight)
+        QApplication.instance().setLayoutDirection(
+            Qt.RightToLeft if translator.is_rtl else Qt.LeftToRight
+        )
 
     def _retranslate(self, _code: str) -> None:
         for idx, (key, icon) in enumerate(_NAV):
             self._nav_buttons[idx].setText(f"  {icon}   {tr(key)}")
         self._home.retranslate()
+        self._help_page.retranslate()
         self._refresh_badge()
 
     def _check_updates(self, *, silent: bool) -> None:
@@ -243,6 +283,36 @@ class MainWindow(QMainWindow):
             self._select(1)
             self._refresh_badge()
 
+    # ------------------------------------------------------------------ tray
+    def _on_tray_activated(self, reason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self._show_from_tray()
+
+    def _show_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _quit_from_tray(self) -> None:
+        self._quitting = True
+        self.close()
+
+    # -------------------------------------------------------------- geometry
+    def _restore_geometry(self) -> None:
+        self.setMinimumSize(900, 600)
+        self.resize(1120, 780)
+        geo = self._settings.app.window_geometry
+        if geo:
+            try:
+                from PySide6.QtCore import QByteArray
+
+                self.restoreGeometry(QByteArray.fromBase64(geo.encode("ascii")))
+            except (ValueError, TypeError):
+                pass
+
+    def _save_geometry(self) -> None:
+        self._settings.app.window_geometry = bytes(self.saveGeometry().toBase64()).decode("ascii")
+
     # ------------------------------------------------------------------ close
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -250,26 +320,35 @@ class MainWindow(QMainWindow):
             self._toast.hide()
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self._settings.app.confirm_on_exit and self._queue.active_count() > 0:
-            reply = QMessageBox.question(
-                self, tr("Exit"), tr("StillDownloadingSubscriptionsExit"),
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        # Minimise to tray instead of quitting while downloads run.
+        if (not self._quitting and self._tray and self._tray.isVisible()
+                and self._queue.active_count() > 0):
+            event.ignore()
+            self.hide()
+            self._tray.showMessage(
+                config.APP_NAME,
+                tr("RunningInBackground", count=self._queue.active_count()),
+                QSystemTrayIcon.MessageIcon.Information, 3000,
             )
-            if reply != QMessageBox.Yes:
-                event.ignore()
-                return
-        elif self._settings.app.confirm_on_exit:
+            return
+
+        if not self._quitting and self._settings.app.confirm_on_exit:
+            key = "StillDownloadingSubscriptionsExit" if self._queue.active_count() else "AreYouSureExit"
+            default = QMessageBox.No if self._queue.active_count() else QMessageBox.Yes
             reply = QMessageBox.question(
-                self, tr("Exit"), tr("AreYouSureExit"),
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+                self, tr("Exit"), tr(key),
+                QMessageBox.Yes | QMessageBox.No, default,
             )
             if reply != QMessageBox.Yes:
                 event.ignore()
                 return
 
+        self._save_geometry()
         self._queue.save_state()
         self._queue.wait_for_done(3000)
         self._settings.save()
         self._subs.save()
+        if self._tray:
+            self._tray.hide()
         config.clean_temp_dir()
         super().closeEvent(event)

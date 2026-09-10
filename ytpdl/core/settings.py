@@ -97,6 +97,7 @@ class AppSettings:
     subscription_interval_minutes: int = 60
 
     options_expanded: bool = True
+    window_geometry: str = ""  # base64 of QMainWindow.saveGeometry()
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

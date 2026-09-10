@@ -35,6 +35,8 @@ _EXTRA_EN: dict[str, str] = {
     "SelectedOfTotal": "{count} of {total} selected",
     "BulkHint": "One link per line — videos, playlists or channels.",
     "RestoreQueuePrompt": "{count} unfinished download(s) from your last session. Resume them?",
+    "RunningInBackground": "Still downloading ({count}) — the app is running in the tray.",
+    "Help": "Help",
     "FFmpegMissing": "FFmpeg was not found. Audio-only downloads still work, but "
     "video downloads, format conversion and subtitle embedding need FFmpeg on your PATH.",
     "Queue": "Queue",
