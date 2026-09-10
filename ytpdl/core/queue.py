@@ -7,13 +7,20 @@ the user's "concurrent downloads" preference.
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 
 from PySide6.QtCore import QObject, QThreadPool, Signal
 
+from .. import config
 from .downloader import DownloadJob, JobState
 from .models import ResolvedSource
-from .settings import SettingsStore
+from .settings import DownloadSettings, SettingsStore
+
+log = logging.getLogger(__name__)
+
+_UNFINISHED = (JobState.QUEUED, JobState.RUNNING, JobState.PAUSED, JobState.FAILED)
 
 
 class DownloadQueue(QObject):
@@ -49,12 +56,12 @@ class DownloadQueue(QObject):
                    if j.state in (JobState.RUNNING, JobState.QUEUED, JobState.PAUSED))
 
     # -- mutation --------------------------------------------------------
-    def enqueue(self, source: ResolvedSource) -> str:
+    def enqueue(self, source: ResolvedSource, settings: DownloadSettings | None = None) -> str:
         job_id = uuid.uuid4().hex[:12]
         job = DownloadJob(
             job_id,
             source,
-            self._settings.download.clone(),
+            (settings or self._settings.download).clone(),
             rate_limit_kib=self._settings.app.rate_limit_kib,
             cookies_from_browser=self._settings.app.cookies_from_browser,
         )
@@ -120,3 +127,47 @@ class DownloadQueue(QObject):
     def wait_for_done(self, msec: int = -1) -> bool:
         self.cancel_all()
         return self._pool.waitForDone(msec)
+
+    # -- persistence -----------------------------------------------------
+    def save_state(self) -> None:
+        """Write unfinished jobs so a crash / quit doesn't lose the queue."""
+        pending = [
+            {"source": job.source.to_dict(), "settings": job.settings.to_dict()}
+            for job in self.jobs()
+            if job.state in _UNFINISHED
+        ]
+        try:
+            if pending:
+                config.QUEUE_STATE_FILE.write_text(
+                    json.dumps(pending, ensure_ascii=False), encoding="utf-8"
+                )
+            else:
+                config.QUEUE_STATE_FILE.unlink(missing_ok=True)
+        except OSError as exc:
+            log.warning("could not save queue state: %s", exc)
+
+    @staticmethod
+    def load_pending() -> list[tuple[ResolvedSource, DownloadSettings]]:
+        """Read + delete the saved queue. Returns [(source, settings), ...]."""
+        path = config.QUEUE_STATE_FILE
+        if not path.exists():
+            return []
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            raw = []
+        path.unlink(missing_ok=True)
+        out: list[tuple[ResolvedSource, DownloadSettings]] = []
+        for entry in raw:
+            try:
+                out.append((
+                    ResolvedSource.from_dict(entry["source"]),
+                    DownloadSettings.from_dict(entry["settings"]),
+                ))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
+
+    def restore(self, pending: list[tuple[ResolvedSource, DownloadSettings]]) -> None:
+        for source, settings in pending:
+            self.enqueue(source, settings)

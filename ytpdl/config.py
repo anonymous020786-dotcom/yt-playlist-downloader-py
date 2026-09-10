@@ -18,6 +18,9 @@ GITHUB_REPO = "shaked6540/YoutubePlaylistDownloader"
 
 
 def _appdata_dir() -> Path:
+    override = os.environ.get("YTPDL_DATA_DIR")
+    if override:
+        return Path(override)
     if sys.platform == "win32":
         base = os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming")
     elif sys.platform == "darwin":
@@ -39,6 +42,7 @@ TEMP_DIR: Path = Path(tempfile.gettempdir()) / APP_DIR_NAME
 
 RESOURCES_DIR: Path = Path(__file__).resolve().parent / "resources"
 ICON_FILE: Path = RESOURCES_DIR / "app.png"
+ICON_ICO_FILE: Path = RESOURCES_DIR / "app.ico"
 
 
 def ensure_dirs() -> None:

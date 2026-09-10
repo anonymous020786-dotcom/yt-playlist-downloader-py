@@ -17,11 +17,12 @@ videos, convert them, tag them — rebuilt on **yt-dlp + FFmpeg** with a modern
 | **Subtitles** | Download + embed, pick languages, include auto-generated |
 | **Tagging** | Auto-tag audio from the video title (`[Genre] Artist - Title`), album/track from the playlist, embedded cover art |
 | **Filenames** | Template tokens: `$title $index $artist $songtitle $channel $playlist $genre $videoid` |
-| **Filters** | Item range (subset), duration filter (shorter/longer than N minutes), skip files that already exist |
-| **Queue** | Concurrent downloads (configurable), pause / resume / cancel / retry per job, "open folder" |
+| **Selection** | Per-item checkable list for playlists/channels, plus item range (subset) and a duration filter (shorter/longer than N minutes), skip files that already exist |
+| **Queue** | Concurrent downloads (configurable), pause / resume / cancel / retry per job, "open folder", and **unfinished downloads are offered for resume on next launch** |
 | **Subscriptions** | Track channels/playlists, "check now" diffs against last seen, one-click download of new uploads |
 | **UI** | Light / Dark / follow-system themes, 20+ accent colours, 14 languages (imported from the original) incl. RTL for Arabic & Hebrew |
 | **Updates** | Checks the GitHub releases API and points you at the new version |
+| **Convenience** | Drag a link onto the window, paste button, live "Analyzing…" as you type |
 
 ## Install & run
 
@@ -42,16 +43,26 @@ pip install -e .
 ytpdl
 ```
 
+## FFmpeg
+
+Needed for video downloads, format conversion and subtitle embedding (audio-only
+works without it). `ytpdl.core.ffmpeg` looks for it in this order:
+
+1. next to the app — `./ffmpeg[.exe]`, `./bin/`, or `./ffmpeg/bin/`
+2. on `PATH`
+3. the binary vendored by `imageio-ffmpeg` (`pip install "ytpdl[ffmpeg]"`)
+
+If none is found the Home screen shows a banner explaining what won't work.
+
 ## Building a standalone executable
 
 ```bash
 pip install -e ".[dev]"
-pyinstaller --noconfirm --windowed --name "YouTube Playlist Downloader" ^
-  --collect-all yt_dlp --add-data "ytpdl/i18n/locales;ytpdl/i18n/locales" ^
-  -m ytpdl
+pyinstaller ytpdl.spec
 ```
 
-Ship an `ffmpeg` binary next to the executable or document the dependency.
+The result lands in `dist/YouTube Playlist Downloader/`. Drop an `ffmpeg` binary
+next to the executable (or in `bin/`) and it will be picked up automatically.
 
 ## Project layout
 
@@ -61,10 +72,11 @@ ytpdl/
   i18n/                translator + locales/<code>.json (imported from the WPF .xaml files)
   core/
     settings.py        AppSettings + DownloadSettings dataclasses, JSON store
-    models.py          VideoInfo / ResolvedSource value objects
+    models.py          VideoInfo / ResolvedSource value objects (+ (de)serialization)
     resolver.py        link -> ResolvedSource via yt-dlp (flat metadata)
+    ffmpeg.py          locate an FFmpeg binary (bundled / PATH / imageio-ffmpeg)
     downloader.py      DownloadJob: one yt-dlp run, Qt progress signals, temp-then-move
-    queue.py           DownloadQueue: thread pool + job list
+    queue.py           DownloadQueue: thread pool + job list + resume-on-restart
     titleparse.py      "[Genre] Artist - Title" heuristics (ported from GlobalConsts)
     filenames.py       filename-template expansion + sanitising
     tagging.py         mutagen tag pass on finished audio

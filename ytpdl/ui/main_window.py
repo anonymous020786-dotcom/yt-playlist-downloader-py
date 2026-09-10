@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -78,6 +78,7 @@ class MainWindow(QMainWindow):
         self._wire()
         self._select(0)
 
+        QTimer.singleShot(200, self._offer_restore)
         if settings.app.check_for_updates:
             self._check_updates(silent=True)
 
@@ -202,13 +203,27 @@ class MainWindow(QMainWindow):
         worker.signals.ok.connect(_done)
         self._pool.start(worker)
 
+    def _offer_restore(self) -> None:
+        pending = self._queue.load_pending()
+        if not pending:
+            return
+        reply = QMessageBox.question(
+            self, config.APP_NAME,
+            tr("RestoreQueuePrompt", count=len(pending)),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+        )
+        if reply == QMessageBox.Yes:
+            self._queue.restore(pending)
+            self._select(1)
+            self._refresh_badge()
+
     # ------------------------------------------------------------------ close
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         if self._toast.isVisible():
             self._toast.hide()
 
-    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+    def closeEvent(self, event: QCloseEvent) -> None:
         if self._settings.app.confirm_on_exit and self._queue.active_count() > 0:
             reply = QMessageBox.question(
                 self, tr("Exit"), tr("StillDownloadingSubscriptionsExit"),
@@ -226,6 +241,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
 
+        self._queue.save_state()
         self._queue.wait_for_done(3000)
         self._settings.save()
         self._subs.save()

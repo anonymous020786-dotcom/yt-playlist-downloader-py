@@ -1,0 +1,89 @@
+"""Locate an FFmpeg binary.
+
+Search order:
+
+1. A copy shipped next to the app (``<app>/ffmpeg[.exe]`` or ``<app>/bin/``) —
+   this is how a PyInstaller bundle would carry it.
+2. ``ffmpeg`` on ``PATH``.
+3. The binary vendored by the optional ``imageio-ffmpeg`` package, if installed.
+
+yt-dlp only needs the containing *directory*, which is what :func:`ffmpeg_dir`
+returns (or ``None``). :func:`ffmpeg_path` returns the full path to the
+executable for display / version checks.
+"""
+
+from __future__ import annotations
+
+import functools
+import logging
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+_EXE = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+
+
+def _bundle_root() -> Path:
+    if getattr(sys, "frozen", False):  # PyInstaller
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent.parent.parent
+
+
+@functools.lru_cache(maxsize=1)
+def ffmpeg_path() -> str | None:
+    root = _bundle_root()
+    for candidate in (root / _EXE, root / "bin" / _EXE, root / "ffmpeg" / "bin" / _EXE):
+        if candidate.is_file():
+            return str(candidate)
+
+    on_path = shutil.which("ffmpeg")
+    if on_path:
+        return on_path
+
+    try:
+        import imageio_ffmpeg
+
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if exe and Path(exe).is_file():
+            return exe
+    except Exception as exc:  # noqa: BLE001 - optional dependency; any failure = unavailable
+        log.debug("imageio-ffmpeg unavailable: %s", exc)
+
+    return None
+
+
+def ffmpeg_dir() -> str | None:
+    path = ffmpeg_path()
+    return str(Path(path).parent) if path else None
+
+
+def has_ffmpeg() -> bool:
+    return ffmpeg_path() is not None
+
+
+@functools.lru_cache(maxsize=1)
+def ffmpeg_version() -> str:
+    path = ffmpeg_path()
+    if not path:
+        return ""
+    try:
+        out = subprocess.run(
+            [path, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        first = out.stdout.splitlines()[0] if out.stdout else ""
+        return first.replace("ffmpeg version ", "").split(" ")[0]
+    except (OSError, subprocess.SubprocessError, IndexError):
+        return ""
+
+
+def reset_cache() -> None:
+    ffmpeg_path.cache_clear()
+    ffmpeg_version.cache_clear()

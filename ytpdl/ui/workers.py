@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, QRunnable, Signal
 
-from ..core.resolver import ResolveError, resolve
 from ..core.models import ResolvedSource
+from ..core.resolver import ResolveError, resolve
 from ..core.updater import UpdateInfo, check_for_update
 
 

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from PySide6.QtCore import QThreadPool, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
-    QCheckBox,
     QLabel,
     QPushButton,
     QScrollArea,
@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from ... import __version__, config
 from ...core.settings import SettingsStore
 from ...i18n import available_locales, tr
-from ..widgets.common import card, dim, heading
+from ..widgets.common import heading
 from ..workers import UpdateWorker
 
 

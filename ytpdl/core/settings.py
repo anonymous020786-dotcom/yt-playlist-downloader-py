@@ -65,7 +65,7 @@ class DownloadSettings:
     filename_template: str = "$title"
     audio_language: str = "default"
 
-    def clone(self) -> "DownloadSettings":
+    def clone(self) -> DownloadSettings:
         return dataclasses.replace(self)
 
     # -- (de)serialization -------------------------------------------------
@@ -73,7 +73,7 @@ class DownloadSettings:
         return dataclasses.asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DownloadSettings":
+    def from_dict(cls, data: dict[str, Any]) -> DownloadSettings:
         return _coerce(cls, data)
 
 
@@ -102,7 +102,7 @@ class AppSettings:
         return dataclasses.asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AppSettings":
+    def from_dict(cls, data: dict[str, Any]) -> AppSettings:
         return _coerce(cls, data)
 
 

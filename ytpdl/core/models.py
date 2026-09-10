@@ -47,3 +47,24 @@ class ResolvedSource:
     @property
     def is_collection(self) -> bool:
         return self.kind in (SourceKind.PLAYLIST, SourceKind.CHANNEL)
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind.value,
+            "title": self.title,
+            "url": self.url,
+            "author": self.author,
+            "thumbnail": self.thumbnail,
+            "videos": [v.__dict__ for v in self.videos],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ResolvedSource:
+        return cls(
+            kind=SourceKind(data.get("kind", "video")),
+            title=data.get("title", ""),
+            url=data.get("url", ""),
+            author=data.get("author", ""),
+            thumbnail=data.get("thumbnail", ""),
+            videos=[VideoInfo(**v) for v in data.get("videos", [])],
+        )

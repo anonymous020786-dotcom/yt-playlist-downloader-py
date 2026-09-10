@@ -123,9 +123,19 @@ QLabel#H1 {{ font-size: 22px; font-weight: 700; }}
 QLabel#H2 {{ font-size: 15px; font-weight: 600; }}
 QLabel#Dim {{ color: {p.text_dim}; }}
 QLabel#Pill {{
-    background: {p.surface_alt}; color: {p.text_dim};
-    border-radius: 10px; padding: 2px 10px; font-size: 11px;
+    background: {_mix(p.surface, p.accent, 0.16)}; color: {p.text};
+    border: 1px solid {_mix(p.border, p.accent, 0.4)};
+    border-radius: 10px; padding: 3px 11px; font-size: 11px; font-weight: 600;
 }}
+QLabel#SectionLabel {{
+    color: {p.text_dim}; font-size: 10px; font-weight: 700; letter-spacing: 1px;
+}}
+QLabel#MetaLine {{ color: {p.accent}; font-size: 12px; font-weight: 600; }}
+QFrame#Banner {{
+    background: {_mix(p.surface, p.danger, 0.14)};
+    border: 1px solid {_mix(p.border, p.danger, 0.5)}; border-radius: 10px;
+}}
+QFrame#Banner QLabel {{ color: {p.text}; }}
 
 /* -- inputs -- */
 QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
@@ -185,6 +195,16 @@ QTabBar::tab:selected {{ color: {p.text}; border-bottom: 2px solid {p.accent}; }
 
 /* -- scrollbars -- */
 QScrollArea {{ border: none; background: transparent; }}
+QScrollArea > QWidget > QWidget {{ background: transparent; }}
+QAbstractScrollArea {{ background: transparent; }}
+QListWidget {{
+    background: {p.surface_alt}; border: 1px solid {p.border}; border-radius: 8px;
+    padding: 4px;
+}}
+QListWidget::item {{ padding: 5px 6px; border-radius: 5px; }}
+QListWidget::item:hover {{ background: {p.hover}; }}
+QTabWidget > QWidget {{ background: transparent; }}
+QTabWidget::pane {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {p.border}; border-radius: 5px; min-height: 30px; }}
 QScrollBar::handle:vertical:hover {{ background: {p.text_dim}; }}

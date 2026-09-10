@@ -1,17 +1,23 @@
-"""Home: paste a link, review what was found, tweak options, send to the queue.
+"""Home: paste a link, review what was found, pick items, tweak options, queue.
 
 A secondary tab accepts a newline-separated list of links for bulk queuing.
 """
 
 from __future__ import annotations
 
+import dataclasses
+
 from PySide6.QtCore import Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -20,10 +26,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...core.ffmpeg import has_ffmpeg
 from ...core.models import ResolvedSource, SourceKind
 from ...core.settings import SettingsStore
 from ...i18n import tr
-from ..widgets.common import Thumbnail, card, dim, heading, pill
+from ..widgets.common import Thumbnail, dim, heading
 from ..widgets.download_options import DownloadOptions
 from ..workers import BulkResolveWorker, ResolveWorker
 
@@ -38,6 +45,7 @@ class HomePage(QWidget):
         self._pool = QThreadPool.globalInstance()
         self._source: ResolvedSource | None = None
         self._resolve_token = 0
+        self.setAcceptDrops(True)
 
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
@@ -46,28 +54,50 @@ class HomePage(QWidget):
 
         self._build()
         self._options.load(settings.download)
-        self._options.changed.connect(self._persist_options)
+        self._options.changed.connect(self._on_options_changed)
+        self._refresh_ffmpeg_banner()
 
     # ------------------------------------------------------------------ build
     def _build(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 24, 28, 24)
-        root.setSpacing(18)
+        root.setSpacing(14)
 
         self._page_title = heading(tr("StartADownload"))
         root.addWidget(self._page_title)
         self._page_hint = dim(tr("PasteLinkHint"))
         root.addWidget(self._page_hint)
 
+        self._banner = self._build_banner()
+        root.addWidget(self._banner)
+
         self._tabs = QTabWidget()
         self._tabs.addTab(self._single_tab(), tr("Home"))
         self._tabs.addTab(self._bulk_tab(), tr("Bulk"))
         root.addWidget(self._tabs, 1)
 
+    def _build_banner(self) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("Banner")
+        lay = QHBoxLayout(frame)
+        lay.setContentsMargins(14, 10, 14, 10)
+        self._banner_label = QLabel(tr("FFmpegMissing"))
+        self._banner_label.setWordWrap(True)
+        lay.addWidget(self._banner_label, 1)
+        frame.hide()
+        return frame
+
     def _single_tab(self) -> QWidget:
         page = QWidget()
-        lay = QVBoxLayout(page)
-        lay.setContentsMargins(0, 12, 0, 0)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 12, 0, 0)
+        outer.setSpacing(14)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        lay = QVBoxLayout(body)
+        lay.setContentsMargins(0, 0, 8, 0)
         lay.setSpacing(16)
 
         search_row = QHBoxLayout()
@@ -85,11 +115,14 @@ class HomePage(QWidget):
         # --- result card ------------------------------------------------
         self._result_card = QFrame()
         self._result_card.setObjectName("Card")
-        rc = QHBoxLayout(self._result_card)
-        rc.setContentsMargins(16, 16, 16, 16)
-        rc.setSpacing(16)
-        self._thumb = Thumbnail(200, 112)
-        rc.addWidget(self._thumb, 0, Qt.AlignTop)
+        card_lay = QVBoxLayout(self._result_card)
+        card_lay.setContentsMargins(16, 16, 16, 16)
+        card_lay.setSpacing(12)
+
+        top = QHBoxLayout()
+        top.setSpacing(16)
+        self._thumb = Thumbnail(180, 101)
+        top.addWidget(self._thumb, 0, Qt.AlignTop)
         info = QVBoxLayout()
         info.setSpacing(6)
         self._res_title = QLabel("")
@@ -97,53 +130,73 @@ class HomePage(QWidget):
         self._res_title.setWordWrap(True)
         self._res_author = QLabel("")
         self._res_author.setObjectName("Dim")
-        self._res_meta = QHBoxLayout()
-        self._res_meta.setSpacing(6)
-        self._res_meta.addStretch(1)
+        self._res_meta_label = QLabel("")
+        self._res_meta_label.setObjectName("MetaLine")
         info.addWidget(self._res_title)
         info.addWidget(self._res_author)
-        meta_holder = QWidget()
-        meta_holder.setLayout(self._res_meta)
-        info.addWidget(meta_holder, 0, Qt.AlignLeft)
-        info.addStretch(1)
-        rc.addLayout(info, 1)
+        info.addWidget(self._res_meta_label)
+        info.addStretch(0)
+        top.addLayout(info, 1)
+        top.setAlignment(Qt.AlignTop)
+        card_lay.addLayout(top)
+
+        # per-item selection list (collections only)
+        self._select_bar = QHBoxLayout()
+        self._select_bar.setSpacing(8)
+        self._select_count = QLabel("")
+        self._select_count.setObjectName("Dim")
+        btn_all = QPushButton(tr("SelectAll"))
+        btn_all.setObjectName("Ghost")
+        btn_all.clicked.connect(lambda: self._set_all_checked(True))
+        btn_none = QPushButton(tr("SelectNone"))
+        btn_none.setObjectName("Ghost")
+        btn_none.clicked.connect(lambda: self._set_all_checked(False))
+        self._select_bar.addWidget(self._select_count, 1)
+        self._select_bar.addWidget(btn_all)
+        self._select_bar.addWidget(btn_none)
+        self._select_bar_holder = QWidget()
+        self._select_bar_holder.setLayout(self._select_bar)
+        card_lay.addWidget(self._select_bar_holder)
+
+        self._video_list = QListWidget()
+        self._video_list.setSelectionMode(QAbstractItemView.NoSelection)
+        self._video_list.setUniformItemSizes(True)
+        self._video_list.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self._video_list.itemChanged.connect(self._on_item_checked)
+        card_lay.addWidget(self._video_list)
+
         self._result_card.hide()
         lay.addWidget(self._result_card)
 
         self._status = dim("")
+        self._status.setVisible(False)
         lay.addWidget(self._status)
 
         # --- options drawer ------------------------------------------
         self._options = DownloadOptions()
-        opt_toggle = QPushButton("⚙  " + tr("Options"))
-        opt_toggle.setObjectName("Ghost")
-        opt_toggle.setCheckable(True)
-        opt_toggle.setChecked(self._settings.app.options_expanded)
-        opt_scroll = QScrollArea()
-        opt_scroll.setWidgetResizable(True)
-        opt_scroll.setWidget(self._options)
-        opt_scroll.setVisible(self._settings.app.options_expanded)
-        opt_scroll.setMaximumHeight(340)
-
-        def _toggle(checked: bool) -> None:
-            opt_scroll.setVisible(checked)
-            self._settings.app.options_expanded = checked
-
-        opt_toggle.toggled.connect(_toggle)
-        lay.addWidget(opt_toggle)
-        lay.addWidget(opt_scroll)
+        self._opt_toggle = QPushButton("⚙  " + tr("Options"))
+        self._opt_toggle.setObjectName("Ghost")
+        self._opt_toggle.setCheckable(True)
+        self._opt_toggle.setChecked(self._settings.app.options_expanded)
+        self._options.setVisible(self._settings.app.options_expanded)
+        self._opt_toggle.toggled.connect(self._toggle_options)
+        lay.addWidget(self._opt_toggle)
+        lay.addWidget(self._options)
         lay.addStretch(1)
 
-        # --- action bar ------------------------------------------------
+        scroll.setWidget(body)
+        outer.addWidget(scroll, 1)
+
+        # --- action bar (fixed at bottom) --------------------------------
         actions = QHBoxLayout()
+        actions.addWidget(QLabel(tr("SaveDirectory")))
         self._path_label = QLabel(self._settings.download.save_path)
         self._path_label.setObjectName("Dim")
         browse = QPushButton(tr("Browse"))
         browse.clicked.connect(self._browse)
-        actions.addWidget(QLabel(tr("SaveDirectory")))
         actions.addWidget(self._path_label, 1)
         actions.addWidget(browse)
-        lay.addLayout(actions)
+        outer.addLayout(actions)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
@@ -156,7 +209,7 @@ class HomePage(QWidget):
         self._btn_download.setEnabled(False)
         btn_row.addWidget(self._btn_queue)
         btn_row.addWidget(self._btn_download)
-        lay.addLayout(btn_row)
+        outer.addLayout(btn_row)
         return page
 
     def _bulk_tab(self) -> QWidget:
@@ -164,9 +217,11 @@ class HomePage(QWidget):
         lay = QVBoxLayout(page)
         lay.setContentsMargins(0, 12, 0, 0)
         lay.setSpacing(14)
-        lay.addWidget(dim("One link per line — videos, playlists or channels."))
+        lay.addWidget(dim(tr("BulkHint")))
         self._bulk_text = QPlainTextEdit()
-        self._bulk_text.setPlaceholderText("https://www.youtube.com/watch?v=…\nhttps://www.youtube.com/playlist?list=…")
+        self._bulk_text.setPlaceholderText(
+            "https://www.youtube.com/watch?v=…\nhttps://www.youtube.com/playlist?list=…"
+        )
         lay.addWidget(self._bulk_text, 1)
         row = QHBoxLayout()
         row.addStretch(1)
@@ -180,7 +235,26 @@ class HomePage(QWidget):
         lay.addLayout(row)
         return page
 
+    # ------------------------------------------------------------- drag & drop
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasText() or event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        md = event.mimeData()
+        text = md.text().strip()
+        if md.hasUrls() and md.urls():
+            text = md.urls()[0].toString()
+        if text:
+            self._tabs.setCurrentIndex(0)
+            self._search.setText(text)
+            event.acceptProposedAction()
+
     # ------------------------------------------------------------- behaviour
+    def _toggle_options(self, checked: bool) -> None:
+        self._options.setVisible(checked)
+        self._settings.app.options_expanded = checked
+
     def _paste(self) -> None:
         from PySide6.QtWidgets import QApplication
 
@@ -195,9 +269,19 @@ class HomePage(QWidget):
             self._settings.app.save_directory = chosen
             self._path_label.setText(chosen)
 
-    def _persist_options(self) -> None:
-        self._options.apply(self._settings.download)
+    def _set_status(self, text: str) -> None:
+        self._status.setText(text)
+        self._status.setVisible(bool(text))
 
+    def _on_options_changed(self) -> None:
+        self._options.apply(self._settings.download)
+        self._refresh_ffmpeg_banner()
+
+    def _refresh_ffmpeg_banner(self) -> None:
+        needs = not self._options.audio_only or self._settings.download.convert
+        self._banner.setVisible(needs and not has_ffmpeg())
+
+    # ------------------------------------------------------------- resolving
     def _start_resolve(self) -> None:
         text = self._search.text().strip()
         self._debounce.stop()
@@ -206,12 +290,12 @@ class HomePage(QWidget):
         self._btn_download.setEnabled(False)
         if not text:
             self._result_card.hide()
-            self._status.setText("")
+            self._set_status("")
             return
 
         self._resolve_token += 1
         token = self._resolve_token
-        self._status.setText(tr("Analyzing"))
+        self._set_status(tr("Analyzing"))
         worker = ResolveWorker(text, self._settings.app.cookies_from_browser)
         worker.signals.ok.connect(lambda src, t=token: self._on_resolved(src, t))
         worker.signals.err.connect(lambda msg, t=token: self._on_resolve_error(msg, t))
@@ -221,25 +305,23 @@ class HomePage(QWidget):
         if token != self._resolve_token:
             return
         self._source = source
-        self._status.setText("")
+        self._set_status("")
         self._result_card.show()
         self._thumb.load(source.thumbnail)
         self._res_title.setText(source.title)
         self._res_author.setText(tr("PlaylistBy", author=source.author) if source.author else "")
 
-        while self._res_meta.count() > 1:
-            item = self._res_meta.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
         kind_label = {
             SourceKind.VIDEO: tr("Video"),
             SourceKind.PLAYLIST: tr("Playlist"),
             SourceKind.CHANNEL: tr("Channel"),
         }[source.kind]
-        self._res_meta.insertWidget(0, pill(kind_label))
+        parts = [kind_label]
         if source.is_collection:
-            self._res_meta.insertWidget(1, pill(tr("ItemsSelected", count=source.count)))
+            parts.append(tr("ItemsSelected", count=source.count))
+        self._res_meta_label.setText("   ·   ".join(parts))
 
+        self._populate_video_list(source)
         self._btn_queue.setEnabled(True)
         self._btn_download.setEnabled(True)
 
@@ -247,16 +329,75 @@ class HomePage(QWidget):
         if token != self._resolve_token:
             return
         self._result_card.hide()
-        self._status.setText(f"{tr('Error')}: {message or tr('InvalidLink')}")
+        self._set_status(f"{tr('Error')}: {message or tr('InvalidLink')}")
 
+    # ------------------------------------------------------------- selection
+    def _populate_video_list(self, source: ResolvedSource) -> None:
+        collection = source.is_collection and source.count > 1
+        self._select_bar_holder.setVisible(collection)
+        self._video_list.setVisible(collection)
+        self._video_list.blockSignals(True)
+        self._video_list.clear()
+        if collection:
+            for i, video in enumerate(source.videos, start=1):
+                dur = f"  ·  {video.duration_text}" if video.duration else ""
+                item = QListWidgetItem(f"{i}.  {video.title}{dur}")
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Checked)
+                item.setData(Qt.UserRole, video.id)
+                self._video_list.addItem(item)
+        self._video_list.blockSignals(False)
+        if collection and self._video_list.count():
+            row_h = self._video_list.sizeHintForRow(0) or 22
+            self._video_list.setFixedHeight(min(self._video_list.count(), 7) * row_h + 8)
+        self._update_select_count()
+
+    def _set_all_checked(self, checked: bool) -> None:
+        self._video_list.blockSignals(True)
+        for i in range(self._video_list.count()):
+            self._video_list.item(i).setCheckState(Qt.Checked if checked else Qt.Unchecked)
+        self._video_list.blockSignals(False)
+        self._update_select_count()
+
+    def _on_item_checked(self, _item: QListWidgetItem) -> None:
+        self._update_select_count()
+
+    def _update_select_count(self) -> None:
+        total = self._video_list.count()
+        chosen = sum(
+            1 for i in range(total)
+            if self._video_list.item(i).checkState() == Qt.Checked
+        )
+        self._select_count.setText(tr("SelectedOfTotal", count=chosen, total=total))
+        if total:
+            self._btn_queue.setEnabled(chosen > 0)
+            self._btn_download.setEnabled(chosen > 0)
+
+    def _selected_source(self) -> ResolvedSource | None:
+        if self._source is None:
+            return None
+        if not self._video_list.isVisible() or self._video_list.count() == 0:
+            return self._source
+        keep = {
+            self._video_list.item(i).data(Qt.UserRole)
+            for i in range(self._video_list.count())
+            if self._video_list.item(i).checkState() == Qt.Checked
+        }
+        videos = [v for v in self._source.videos if v.id in keep]
+        if len(videos) == len(self._source.videos):
+            return self._source
+        return dataclasses.replace(self._source, videos=videos)
+
+    # ------------------------------------------------------------- enqueue
     def _enqueue_single(self) -> None:
-        if not self._source:
+        source = self._selected_source()
+        if source is None:
             return
         self._options.apply(self._settings.download)
         if not self._settings.download.save_path:
             self.toast.emit(tr("DownloadPathMissing"))
             return
-        self.queue_requested.emit([self._source])
+        self.queue_requested.emit([source])
         self.toast.emit(tr("Queued"))
         self._search.clear()
         self._result_card.hide()
@@ -289,8 +430,10 @@ class HomePage(QWidget):
     def retranslate(self) -> None:
         self._page_title.setText(tr("StartADownload"))
         self._page_hint.setText(tr("PasteLinkHint"))
+        self._banner_label.setText(tr("FFmpegMissing"))
         self._search.setPlaceholderText(tr("InsertYoutubePlaylistLinkHere"))
         self._tabs.setTabText(0, tr("Home"))
         self._tabs.setTabText(1, tr("Bulk"))
+        self._opt_toggle.setText("⚙  " + tr("Options"))
         self._btn_queue.setText(tr("AddToQueue"))
         self._btn_download.setText(tr("DownloadNow"))

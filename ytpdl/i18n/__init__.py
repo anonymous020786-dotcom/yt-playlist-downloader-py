@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -30,6 +30,13 @@ _EXTRA_EN: dict[str, str] = {
     "PasteLinkHint": "Paste a video, playlist or channel link — it's analyzed automatically.",
     "Options": "Options",
     "Channel": "Channel",
+    "SelectAll": "Select all",
+    "SelectNone": "Select none",
+    "SelectedOfTotal": "{count} of {total} selected",
+    "BulkHint": "One link per line — videos, playlists or channels.",
+    "RestoreQueuePrompt": "{count} unfinished download(s) from your last session. Resume them?",
+    "FFmpegMissing": "FFmpeg was not found. Audio-only downloads still work, but "
+    "video downloads, format conversion and subtitle embedding need FFmpeg on your PATH.",
     "Queue": "Queue",
     "Subscriptions": "Subscriptions",
     "Bulk": "Bulk",
@@ -160,7 +167,7 @@ class _Translator(QObject):
         return text
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_locale(code: str) -> dict | None:
     path = _LOCALES_DIR / f"{code}.json"
     if not path.exists():

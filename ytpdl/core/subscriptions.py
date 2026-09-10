@@ -14,8 +14,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .. import config
-from .resolver import ResolveError, resolve
 from .models import ResolvedSource
+from .resolver import ResolveError, resolve
 
 
 @dataclass
@@ -38,7 +38,7 @@ class SubscriptionStore:
         if self._path.exists():
             try:
                 raw = json.loads(self._path.read_text(encoding="utf-8"))
-                self.items = [Subscription(**{**{"known_ids": []}, **d}) for d in raw]
+                self.items = [Subscription(**{"known_ids": [], **d}) for d in raw]
             except (OSError, ValueError, TypeError):
                 self.items = []
 

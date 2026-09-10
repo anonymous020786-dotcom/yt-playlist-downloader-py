@@ -16,7 +16,7 @@ from .models import ResolvedSource, SourceKind, VideoInfo
 
 log = logging.getLogger(__name__)
 
-_YT_HOST = re.compile(r"(?:^|\.)(?:youtube\.com|youtu\.be|youtube-nocookie\.com)$", re.I)
+_YT_HOST = re.compile(r"(?:^|\.)(?:youtube\.com|youtu\.be|youtube-nocookie\.com)$", re.IGNORECASE)
 _VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
@@ -79,7 +79,7 @@ def resolve(text: str, *, cookies_from_browser: str = "") -> ResolvedSource:
     try:
         with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(text, download=False)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise ResolveError(str(exc)) from exc
     if info is None:
         raise ResolveError("nothing found at that link")

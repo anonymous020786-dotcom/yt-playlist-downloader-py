@@ -22,6 +22,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadCancelled, DownloadError
 
 from .. import config
+from .ffmpeg import ffmpeg_dir
 from .filenames import render_template
 from .models import ResolvedSource, SourceKind
 from .settings import DownloadSettings
@@ -73,8 +74,9 @@ class DownloadJob(QRunnable):
         self._cancelled = False
         self._paused = False
         self._work_dir = config.TEMP_DIR / job_id
-        self._index_by_id = self._build_index_map()
-        self.total = len(self._index_by_id) or self.source.count
+        self._selected = self._select_videos()
+        self._index_by_id = {v.id: i for i, v in enumerate(self._selected, start=1) if v.id}
+        self.total = len(self._selected) or self.source.count
 
     # -- public controls -------------------------------------------------------
     def cancel(self) -> None:
@@ -87,13 +89,15 @@ class DownloadJob(QRunnable):
         self._paused = False
 
     # -- helpers -------------------------------------------------------------
-    def _build_index_map(self) -> dict[str, int]:
+    def _select_videos(self) -> list:
+        """Apply the subset range to the (already prune-aware) video list."""
         s = self.settings
         videos = self.source.videos
-        start = max(1, s.subset_start) if s.use_subset else 1
-        end = s.subset_end if (s.use_subset and s.subset_end) else len(videos)
-        chosen = videos[start - 1 : end]
-        return {v.id: (start + i) for i, v in enumerate(chosen) if v.id}
+        if not s.use_subset:
+            return list(videos)
+        start = max(1, s.subset_start)
+        end = s.subset_end if s.subset_end else len(videos)
+        return list(videos[start - 1 : end])
 
     def _set_state(self, state: JobState) -> None:
         self.state = state
@@ -124,15 +128,20 @@ class DownloadJob(QRunnable):
             "post_hooks": [self._post_hook],
         }
 
+        location = ffmpeg_dir()
+        if location:
+            opts["ffmpeg_location"] = location
+
         if self.cookies_from_browser:
             opts["cookiesfrombrowser"] = (self.cookies_from_browser,)
         if self.rate_limit_kib > 0:
             opts["ratelimit"] = self.rate_limit_kib * 1024
 
-        # -- item selection ---------------------------------------------------
-        if s.use_subset:
-            end = str(s.subset_end) if s.subset_end else ""
-            opts["playlist_items"] = f"{max(1, s.subset_start)}:{end}"
+        # -- item selection --------------------------------------------------
+        # Collections are driven by an explicit list of video URLs (see run()),
+        # so subset + per-item deselection are already applied; tell yt-dlp not
+        # to re-expand anything it's handed.
+        opts["noplaylist"] = True
 
         if s.filter_by_length:
             minutes = s.filter_minutes
@@ -221,7 +230,7 @@ class DownloadJob(QRunnable):
         """Called once per finished file with its final path in the temp dir."""
         try:
             self._finalize_file(Path(filepath))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("finalize failed for %s", filepath)
             self.not_downloaded.append((Path(filepath).name, str(exc)))
 
@@ -257,8 +266,12 @@ class DownloadJob(QRunnable):
         try:
             opts = self._build_opts()
             self.signals.item_progress.emit(self.job_id, 0, self.total)
+            if self.source.kind == SourceKind.VIDEO or not self._selected:
+                targets = [self.source.url]
+            else:
+                targets = [v.url for v in self._selected if v.url]
             with YoutubeDL(opts) as ydl:
-                ydl.download([self.source.url])
+                ydl.download(targets)
         except DownloadCancelled:
             self._set_state(JobState.CANCELLED)
             self.signals.finished.emit(self.job_id, "")
@@ -270,7 +283,7 @@ class DownloadJob(QRunnable):
             self.signals.finished.emit(self.job_id, self.error)
             self._cleanup()
             return
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("unexpected error in job %s", self.job_id)
             self.error = str(exc)
             self._set_state(JobState.FAILED)

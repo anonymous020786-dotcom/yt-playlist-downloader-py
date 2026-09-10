@@ -18,7 +18,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pyinstaller>=6.6", "ruff>=0.6"]
+dev = ["pytest>=8", "pyinstaller>=6.6", "ruff>=0.6", "pillow>=10"]
+ffmpeg = ["imageio-ffmpeg>=0.5"]  # vendored FFmpeg binary, no system install needed
 
 [project.gui-scripts]
 ytpdl = "ytpdl.app:main"

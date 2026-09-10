@@ -35,8 +35,10 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(config.APP_NAME)
     app.setOrganizationName("YTPDL")
-    if config.ICON_FILE.exists():
-        app.setWindowIcon(QIcon(str(config.ICON_FILE)))
+    for icon_path in (config.ICON_ICO_FILE, config.ICON_FILE):
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
+            break
 
     settings = SettingsStore()
     translator.set_locale(settings.app.language)

@@ -1,4 +1,7 @@
-"""Capture screenshots of several pages / states for review."""
+"""Capture screenshots of several pages / states for review.
+
+    YTPDL_DATA_DIR=$(mktemp -d) python scripts/manual_shots.py
+"""
 
 from __future__ import annotations
 
@@ -17,47 +20,69 @@ from ytpdl.ui.main_window import MainWindow
 
 s = SettingsStore()
 s.app.check_for_updates = False
+s.app.options_expanded = True
 translator.set_locale("en")
 apply_theme(app, "dark", s.app.accent)
 w = MainWindow(s)
-w.resize(1180, 800)
+w.resize(1180, 860)
 w.show()
 
+titles = [
+    "Building a Rust web server from scratch — part 1",
+    "The physics of skipping stones (slow motion)",
+    "I visited the world's quietest room",
+    "How compilers actually work",
+    "A history of the synthesizer in 12 sounds",
+    "Why bridges don't fall down (usually)",
+]
 fake = ResolvedSource(
     kind=SourceKind.PLAYLIST,
-    title="Lo-fi beats to code to — 2024 mix",
+    title="Deep dives — engineering & science",
     url="https://youtube.com/playlist?list=x",
-    author="Chillhop Music",
+    author="Longform Channel",
     thumbnail="",
-    videos=[VideoInfo(f"id{i:09d}", f"Track {i}", "u", "Artist", 200 + i) for i in range(42)],
+    videos=[
+        VideoInfo(f"vid{i:08d}", titles[i % len(titles)], "u", "Longform Channel", 600 + i * 47)
+        for i in range(23)
+    ],
 )
 
-shots = []
+seq = iter(["home", "resolved", "light", "queue", "settings", "about", "rtl", "done"])
+state = {"cur": next(seq)}
 
 
 def step():
-    if not shots:
+    cur = state["cur"]
+    if cur == "home":
+        w.grab().save("scripts/_home.png")
+    elif cur == "resolved":
         w._home._on_resolved(fake, w._home._resolve_token)
         w.grab().save("scripts/_home_resolved.png")
-        shots.append(1)
-        QTimer.singleShot(200, step)
-    elif shots == [1]:
-        w._on_queue_requested([fake, fake])
+    elif cur == "light":
+        apply_theme(app, "light", s.app.accent)
+        w._home._on_resolved(fake, w._home._resolve_token)
+        w.grab().save("scripts/_light.png")
+    elif cur == "queue":
+        apply_theme(app, "dark", s.app.accent)
+        w._on_queue_requested([fake])
         w.grab().save("scripts/_queue.png")
-        shots.append(2)
-        QTimer.singleShot(200, step)
-    elif shots == [1, 2]:
+    elif cur == "settings":
         w._select(3)
         w.grab().save("scripts/_settings.png")
-        shots.append(3)
-        QTimer.singleShot(200, step)
-    else:
+    elif cur == "about":
+        w._select(4)
+        w.grab().save("scripts/_about.png")
+    elif cur == "rtl":
         translator.set_locale("ar")
         app.setLayoutDirection(Qt.RightToLeft)
         w._select(0)
         w.grab().save("scripts/_rtl_arabic.png")
+    else:
         app.quit()
+        return
+    state["cur"] = next(seq)
+    QTimer.singleShot(250, step)
 
 
-QTimer.singleShot(400, step)
+QTimer.singleShot(500, step)
 sys.exit(app.exec())

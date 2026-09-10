@@ -49,7 +49,8 @@ def dim(text: str) -> QLabel:
 def pill(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setObjectName("Pill")
-    lbl.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+    lbl.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+    lbl.setAlignment(Qt.AlignCenter)
     return lbl
 
 
