@@ -6,6 +6,7 @@ venv/
 build/
 dist/
 *.spec
+!ytpdl.spec
 .pytest_cache/
 .ruff_cache/
 *.log
