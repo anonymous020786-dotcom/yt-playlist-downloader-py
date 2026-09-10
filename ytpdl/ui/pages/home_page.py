@@ -145,6 +145,11 @@ class HomePage(QWidget):
         self._select_bar.setSpacing(8)
         self._select_count = QLabel("")
         self._select_count.setObjectName("Dim")
+        self._list_filter = QLineEdit()
+        self._list_filter.setPlaceholderText(tr("Search"))
+        self._list_filter.setClearButtonEnabled(True)
+        self._list_filter.setMaximumWidth(220)
+        self._list_filter.textChanged.connect(self._apply_list_filter)
         btn_all = QPushButton(tr("SelectAll"))
         btn_all.setObjectName("Ghost")
         btn_all.clicked.connect(lambda: self._set_all_checked(True))
@@ -152,6 +157,7 @@ class HomePage(QWidget):
         btn_none.setObjectName("Ghost")
         btn_none.clicked.connect(lambda: self._set_all_checked(False))
         self._select_bar.addWidget(self._select_count, 1)
+        self._select_bar.addWidget(self._list_filter)
         self._select_bar.addWidget(btn_all)
         self._select_bar.addWidget(btn_none)
         self._select_bar_holder = QWidget()
@@ -336,6 +342,10 @@ class HomePage(QWidget):
         collection = source.is_collection and source.count > 1
         self._select_bar_holder.setVisible(collection)
         self._video_list.setVisible(collection)
+        self._list_filter.blockSignals(True)
+        self._list_filter.clear()
+        self._list_filter.blockSignals(False)
+        self._list_filter.setVisible(collection and source.count > 12)
         self._video_list.blockSignals(True)
         self._video_list.clear()
         if collection:
@@ -352,10 +362,20 @@ class HomePage(QWidget):
             self._video_list.setFixedHeight(min(self._video_list.count(), 7) * row_h + 8)
         self._update_select_count()
 
+    def _apply_list_filter(self, text: str) -> None:
+        needle = text.strip().lower()
+        for i in range(self._video_list.count()):
+            item = self._video_list.item(i)
+            item.setHidden(bool(needle) and needle not in item.text().lower())
+
     def _set_all_checked(self, checked: bool) -> None:
+        """Toggle the rows currently visible (respects the filter box)."""
+        state = Qt.Checked if checked else Qt.Unchecked
         self._video_list.blockSignals(True)
         for i in range(self._video_list.count()):
-            self._video_list.item(i).setCheckState(Qt.Checked if checked else Qt.Unchecked)
+            item = self._video_list.item(i)
+            if not item.isHidden():
+                item.setCheckState(state)
         self._video_list.blockSignals(False)
         self._update_select_count()
 
