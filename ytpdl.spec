@@ -9,6 +9,7 @@
 # (`pip install -e ".[ffmpeg]"` before building) — note it has no ffprobe.
 
 import importlib.util
+import os
 
 from PyInstaller.utils.hooks import collect_all
 
@@ -61,6 +62,7 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
+    [("READ ME FIRST.txt", os.path.join(SPECPATH, "installer", "READ ME FIRST.txt"), "DATA")],
     strip=False,
     upx=False,
     name="YouTube Playlist Downloader",

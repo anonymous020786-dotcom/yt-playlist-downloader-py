@@ -1,0 +1,20 @@
+YouTube Playlist Downloader
+============================
+
+Thanks for installing! A few quick notes:
+
+* FFmpeg is required for video downloads, format conversion, and subtitle
+  embedding — audio-only downloads work without it. If you didn't check
+  "Install FFmpeg with winget" during setup, install it separately from
+  https://ffmpeg.org/download.html (or `winget install Gyan.FFmpeg`), or
+  drop an ffmpeg.exe into this app's install folder.
+
+* Settings, download history, and the subscription list are stored in
+  %APPDATA%\YoutubePlaylistDownloader — delete that folder to reset the
+  app to defaults.
+
+* Source, issues, and releases:
+  https://github.com/anonymous020786-dotcom/yt-playlist-downloader-py
+
+* To uninstall: Settings > Apps > YouTube Playlist Downloader > Uninstall,
+  or use the shortcut in this app's Start Menu folder.

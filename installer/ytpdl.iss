@@ -60,7 +60,7 @@ Name: "ffmpeg"; Description: "Install FFmpeg with winget (needed for video downl
 [Files]
 Source: "{#SourceDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#SourceDir}\READ ME FIRST.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
+Source: "{#SourceDir}\_internal\READ ME FIRST.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
