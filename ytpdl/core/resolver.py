@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from yt_dlp import YoutubeDL
 
@@ -18,6 +19,26 @@ log = logging.getLogger(__name__)
 
 _YT_HOST = re.compile(r"(?:^|\.)(?:youtube\.com|youtu\.be|youtube-nocookie\.com)$", re.IGNORECASE)
 _VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+# A bare channel URL (no tab segment) resolves, via extract_flat, to that
+# channel's tab *shortcuts* (Home/Videos/Shorts/...) rather than videos — each
+# entry comes back with id=<channel_id>, not a real video id. Landing
+# directly on the "videos" tab avoids that; anything with an explicit tab
+# (/videos, /streams, /playlists, a bare /playlist?list=...) is left alone.
+_BARE_CHANNEL = re.compile(
+    r"^(https?://)?(www\.)?youtube\.com/(?:@[^/?#]+|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+)/?$",
+    re.IGNORECASE,
+)
+# YouTube adds list= (and index=/start_radio=) to the address bar just from
+# watching a video *inside* a playlist or "up next" queue — not because the
+# viewer asked for the playlist. Copying that URL is the single most common
+# way people share/paste "this one video" links, but yt-dlp's default (with
+# noplaylist=False, needed elsewhere for actual playlist links) treats a URL
+# carrying both v= and list= as "download the whole playlist". Stripping the
+# playlist-context params whenever a specific video is already identified
+# (v= present, or a youtu.be short link) makes a pasted video link resolve to
+# that video, not whatever queue it happened to be playing in. A bare
+# playlist URL (.../playlist?list=..., no v=) is untouched.
+_PLAYLIST_CONTEXT_PARAMS = ("list", "index", "start_radio")
 
 
 class ResolveError(RuntimeError):
@@ -58,12 +79,29 @@ def _best_thumb(entry: dict) -> str:
     return f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else ""
 
 
+def _strip_playlist_context(text: str) -> str:
+    parsed = urlparse(text if "//" in text else f"https://{text}")
+    if not parsed.netloc or not _YT_HOST.search(parsed.netloc):
+        return text
+    query = parse_qs(parsed.query)
+    has_specific_video = "v" in query or parsed.netloc.lower().endswith("youtu.be")
+    if not has_specific_video or "list" not in query:
+        return text
+    for param in _PLAYLIST_CONTEXT_PARAMS:
+        query.pop(param, None)
+    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+
 def resolve(text: str, *, cookies_from_browser: str = "") -> ResolvedSource:
     text = text.strip()
     if not text:
         raise ResolveError("empty link")
     if _VIDEO_ID.match(text):
         text = f"https://www.youtube.com/watch?v={text}"
+    elif _BARE_CHANNEL.match(text):
+        text = text.rstrip("/") + "/videos"
+    else:
+        text = _strip_playlist_context(text)
 
     opts = {
         "quiet": True,

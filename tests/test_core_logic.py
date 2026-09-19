@@ -8,6 +8,7 @@ import pytest
 
 from ytpdl.core.filenames import clean_filename, render_template
 from ytpdl.core.models import VideoInfo
+from ytpdl.core.resolver import _strip_playlist_context
 from ytpdl.core.settings import AppSettings, DownloadSettings
 from ytpdl.core.titleparse import extract_genre, split_artist_title
 
@@ -69,3 +70,38 @@ def test_download_settings_clone_is_independent():
     b = a.clone()
     b.audio_only = True
     assert a.audio_only is False
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        # v= + list= from watching a video inside a playlist/queue: v= wins,
+        # not "download the whole playlist" (the bug this guards against).
+        (
+            "https://www.youtube.com/watch?v=abc12345678&list=PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "https://www.youtube.com/watch?v=abc12345678",
+        ),
+        # index= from queue position should go too.
+        (
+            "https://www.youtube.com/watch?v=abc12345678&list=PLxxx&index=5",
+            "https://www.youtube.com/watch?v=abc12345678",
+        ),
+        # youtu.be short link with a stray list= behaves the same way.
+        (
+            "https://youtu.be/abc12345678?list=PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "https://youtu.be/abc12345678",
+        ),
+        # a bare playlist link (no v=) is genuine playlist intent — untouched.
+        (
+            "https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        ),
+        # a plain video link with no list= is untouched.
+        (
+            "https://www.youtube.com/watch?v=abc12345678",
+            "https://www.youtube.com/watch?v=abc12345678",
+        ),
+    ],
+)
+def test_strip_playlist_context(url, expected):
+    assert _strip_playlist_context(url) == expected
