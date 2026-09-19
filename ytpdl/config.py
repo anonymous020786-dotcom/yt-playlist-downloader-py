@@ -14,7 +14,7 @@ from pathlib import Path
 
 APP_NAME = "YouTube Playlist Downloader"
 APP_DIR_NAME = "YoutubePlaylistDownloader"
-GITHUB_REPO = "shaked6540/YoutubePlaylistDownloader"
+GITHUB_REPO = "anonymous020786-dotcom/yt-playlist-downloader-py"
 
 
 def _appdata_dir() -> Path:
