@@ -72,26 +72,43 @@ jobs:
           }
           Stop-Process -Id $p.Id -Force
 
-      # --- macOS: zip the .app bundle (preserves permissions/symlinks; a
-      # plain `zip` or GitHub's own artifact zipping does not) ---
-      - name: Package macOS app
+      # --- macOS: proper .dmg (double-click to mount, drag to Applications
+      # — the standard macOS distribution format, vs. a bare zip) ---
+      - name: Package macOS .dmg
         if: runner.os == 'macOS'
         run: |
-          cd dist
-          ditto -c -k --sequesterRsrc --keepParent "YouTube Playlist Downloader.app" "../YTPDL-macos.zip"
+          hdiutil create -volname "YouTube Playlist Downloader" \
+            -srcfolder "dist/YouTube Playlist Downloader.app" \
+            -ov -format UDZO "YTPDL-macos.dmg"
 
-      # --- Linux: tarball the onedir build ---
-      - name: Package Linux build
+      # --- Linux: AppImage (single portable executable — the standard
+      # cross-distro format, vs. a bare tarball users have to know how to
+      # unpack and run manually) ---
+      - name: Package Linux AppImage
         if: runner.os == 'Linux'
-        run: tar -czf YTPDL-linux.tar.gz -C dist "YouTube Playlist Downloader"
+        run: |
+          set -e
+          APPDIR=AppDir
+          mkdir -p "$APPDIR/usr/bin"
+          cp -r "dist/YouTube Playlist Downloader" "$APPDIR/usr/bin/"
+          cp packaging/linux/AppRun "$APPDIR/AppRun"
+          chmod +x "$APPDIR/AppRun"
+          cp packaging/linux/ytpdl.desktop "$APPDIR/ytpdl.desktop"
+          cp ytpdl/resources/app.png "$APPDIR/ytpdl.png"
+
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          # --appimage-extract-and-run sidesteps needing FUSE on the runner
+          ./appimagetool-x86_64.AppImage --appimage-extract-and-run "$APPDIR" YTPDL-linux.AppImage
+          chmod +x YTPDL-linux.AppImage
 
       - name: Upload PyInstaller build
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
           path: |
-            YTPDL-macos.zip
-            YTPDL-linux.tar.gz
+            YTPDL-macos.dmg
+            YTPDL-linux.AppImage
             installer/Output/*.exe
           if-no-files-found: ignore
 
@@ -108,7 +125,7 @@ jobs:
       - name: Flatten artifact layout
         run: |
           mkdir -p out
-          find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.exe" \) -exec cp {} out/ \;
+          find artifacts -type f \( -name "*.dmg" -o -name "*.AppImage" -o -name "*.exe" \) -exec cp {} out/ \;
           ls -la out
       - name: Create/update release
         uses: softprops/action-gh-release@v2

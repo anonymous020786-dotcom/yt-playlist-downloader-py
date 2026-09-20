@@ -1,0 +1,5 @@
+#!/bin/sh
+# Entry point AppImage runs. HERE points at the mounted/extracted AppDir root
+# regardless of where the .AppImage file itself lives.
+HERE="$(dirname "$(readlink -f "${0}")")"
+exec "${HERE}/usr/bin/YouTube Playlist Downloader/YouTube Playlist Downloader" "$@"
