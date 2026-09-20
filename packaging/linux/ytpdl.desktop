@@ -4,5 +4,5 @@ Name=YouTube Playlist Downloader
 Comment=Download YouTube videos, playlists, and channels
 Exec=AppRun
 Icon=ytpdl
-Categories=AudioVideo;Network;
+Categories=AudioVideo;
 Terminal=false
