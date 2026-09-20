@@ -8,7 +8,7 @@
 ; bundled; the installer offers to fetch it with winget on the finished page.
 
 #define AppName "YouTube Playlist Downloader"
-#define AppVersion "2.0.2"
+#define AppVersion "2.0.3"
 #define AppPublisher "YTPDL contributors"
 #define AppURL "https://github.com/anonymous020786-dotcom/yt-playlist-downloader-py"
 #define AppExeName "YouTube Playlist Downloader.exe"
