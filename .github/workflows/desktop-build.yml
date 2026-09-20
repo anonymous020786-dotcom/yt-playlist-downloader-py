@@ -1,0 +1,116 @@
+name: Desktop build
+
+# PyInstaller doesn't cross-compile — a Windows machine can't produce a
+# macOS or Linux binary. This runs the real build on each OS's own GitHub
+# Actions runner instead. Manually triggerable any time (workflow_dispatch);
+# pushing a v* tag also builds and attaches all three platforms to a
+# GitHub Release.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset_name: YTPDL-windows
+          - os: macos-latest
+            asset_name: YTPDL-macos
+          - os: ubuntu-latest
+            asset_name: YTPDL-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install system deps (Qt offscreen needs these)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0
+
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,ffmpeg]"
+
+      - name: Build with PyInstaller
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: pyinstaller ytpdl.spec
+
+      # --- Windows: also build the Inno Setup installer ---
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\ytpdl.iss
+        shell: pwsh
+
+      - name: Smoke-test the built app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\YouTube Playlist Downloader\YouTube Playlist Downloader.exe" -PassThru
+          Start-Sleep -Seconds 5
+          if (-not (Get-Process -Id $p.Id -ErrorAction SilentlyContinue)) {
+            throw "App exited within 5 seconds of launch — build is broken"
+          }
+          Stop-Process -Id $p.Id -Force
+
+      # --- macOS: zip the .app bundle (preserves permissions/symlinks; a
+      # plain `zip` or GitHub's own artifact zipping does not) ---
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent "YouTube Playlist Downloader.app" "../YTPDL-macos.zip"
+
+      # --- Linux: tarball the onedir build ---
+      - name: Package Linux build
+        if: runner.os == 'Linux'
+        run: tar -czf YTPDL-linux.tar.gz -C dist "YouTube Playlist Downloader"
+
+      - name: Upload PyInstaller build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: |
+            YTPDL-macos.zip
+            YTPDL-linux.tar.gz
+            installer/Output/*.exe
+          if-no-files-found: ignore
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Flatten artifact layout
+        run: |
+          mkdir -p out
+          find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.exe" \) -exec cp {} out/ \;
+          ls -la out
+      - name: Create/update release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          fail_on_unmatched_files: false
+          generate_release_notes: true

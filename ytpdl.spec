@@ -3,15 +3,25 @@
 #   pip install -e ".[dev]"
 #   pyinstaller ytpdl.spec
 #
-# The result lands in dist/YouTube Playlist Downloader/. FFmpeg is located at
-# runtime by ytpdl.core.ffmpeg: a copy next to the exe / in bin/ wins, then
-# PATH, then the imageio-ffmpeg binary bundled here when it is installed
-# (`pip install -e ".[ffmpeg]"` before building) — note it has no ffprobe.
+# PyInstaller does not cross-compile: run this on Windows for a Windows
+# build, on macOS for a macOS .app, on Linux for a Linux binary (see
+# .github/workflows/desktop-build.yml, which does exactly that on real
+# runners for each OS).
+#
+# The result lands in dist/YouTube Playlist Downloader/ (dist/*.app on
+# macOS). FFmpeg is located at runtime by ytpdl.core.ffmpeg: a copy next to
+# the exe / in bin/ wins, then PATH, then the imageio-ffmpeg binary bundled
+# here when it is installed (`pip install -e ".[ffmpeg]"` before building)
+# — note it has no ffprobe.
 
 import importlib.util
 import os
+import sys
 
 from PyInstaller.utils.hooks import collect_all
+
+sys.path.insert(0, SPECPATH)
+from ytpdl import __version__ as APP_VERSION  # noqa: E402 — single source of truth for the version
 
 datas = [
     ("ytpdl/i18n/locales", "ytpdl/i18n/locales"),
@@ -31,6 +41,15 @@ for pkg in _pkgs:
     hiddenimports += p_hidden
 
 block_cipher = None
+
+if sys.platform == "darwin":
+    icon_file = "ytpdl/resources/app.icns"
+elif sys.platform == "win32":
+    icon_file = "ytpdl/resources/app.ico"
+else:
+    # Linux: PyInstaller's EXE(icon=...) is a no-op there anyway — desktop
+    # icons come from a .desktop file's Icon= entry, not the binary itself.
+    icon_file = None
 
 a = Analysis(
     ["ytpdl_launcher.py"],
@@ -55,7 +74,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon="ytpdl/resources/app.ico",
+    icon=icon_file,
 )
 coll = COLLECT(
     exe,
@@ -67,3 +86,16 @@ coll = COLLECT(
     upx=False,
     name="YouTube Playlist Downloader",
 )
+
+if sys.platform == "darwin":
+    app = BUNDLE(
+        coll,
+        name="YouTube Playlist Downloader.app",
+        icon=icon_file,
+        bundle_identifier="dev.ytpdl.downloader",
+        info_plist={
+            "CFBundleShortVersionString": APP_VERSION,
+            "NSHighResolutionCapable": True,
+            "LSApplicationCategoryType": "public.app-category.video",
+        },
+    )
