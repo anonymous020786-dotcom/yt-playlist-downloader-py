@@ -11,7 +11,7 @@
 ; running it with /SILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS [/RELAUNCH=1].
 
 #define AppName "YouTube Playlist Downloader"
-#define AppVersion "2.0.4"
+#define AppVersion "2.0.5"
 #define AppPublisher "YTPDL contributors"
 #define AppURL "https://github.com/anonymous020786-dotcom/yt-playlist-downloader-py"
 #define AppExeName "YouTube Playlist Downloader.exe"
