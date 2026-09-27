@@ -19,7 +19,7 @@ from ytpdl.ui.main_window import MainWindow
 from ytpdl.ui.theme import apply_theme
 
 s = SettingsStore()
-s.app.check_for_updates = False
+s.app.update_mode = "off"
 s.app.options_expanded = True
 translator.set_locale("en")
 apply_theme(app, "dark", s.app.accent)

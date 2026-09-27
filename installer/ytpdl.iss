@@ -6,6 +6,9 @@
 ;
 ; The one-folder PyInstaller build in dist\ is packaged whole. FFmpeg is not
 ; bundled; the installer offers to fetch it with winget on the finished page.
+;
+; The app updates itself by downloading the next release's Setup.exe and
+; running it with /SILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS [/RELAUNCH=1].
 
 #define AppName "YouTube Playlist Downloader"
 #define AppVersion "2.0.4"
@@ -72,11 +75,19 @@ Filename: "winget"; Parameters: "install --id Gyan.FFmpeg -e --accept-source-agr
   StatusMsg: "Installing FFmpeg (winget)..."; Flags: runhidden runasoriginaluser skipifsilent; Tasks: ffmpeg
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall skipifsilent
+; In-app updates run this installer with /SILENT /RELAUNCH=1 so the app comes
+; back once the new files are in place (the entry above is skipped when silent).
+Filename: "{app}\{#AppExeName}"; Flags: nowait runasoriginaluser; Check: WantRelaunch
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\_internal"
 
 [Code]
+function WantRelaunch(): Boolean;
+begin
+  Result := WizardSilent() and (ExpandConstant('{param:RELAUNCH|0}') = '1');
+end;
+
 function WingetAvailable(): Boolean;
 var
   ResultCode: Integer;

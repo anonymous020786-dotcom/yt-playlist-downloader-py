@@ -32,8 +32,9 @@ from .pages.queue_page import QueuePage
 from .pages.settings_page import SettingsPage
 from .pages.subscriptions_page import SubscriptionsPage
 from .theme import apply_theme
+from .updates import UpdateController
 from .widgets.common import Toast
-from .workers import ResolveWorker, UpdateWorker
+from .workers import ResolveWorker
 
 _NAV = [
     ("Home", "🏠"),
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         self._queue = DownloadQueue(settings)
         self._subs = SubscriptionStore()
         self._quitting = False
+        self._confirm_skipped = False
 
         self.setWindowTitle(config.APP_NAME)
         self._restore_geometry()
@@ -84,14 +86,15 @@ class MainWindow(QMainWindow):
         self._sub_timer = QTimer(self)
         self._sub_timer.timeout.connect(self._subs_page.check_all)
         self._tray = self._build_tray()
+        self._updates = UpdateController(
+            settings, self, self._toast.show_message, self._quit_for_update)
         self._wire()
         self._install_shortcuts()
         self._select(0)
         self._sync_subscription_timer()
 
         QTimer.singleShot(200, self._offer_restore)
-        if settings.app.check_for_updates:
-            self._check_updates(silent=True)
+        self._updates.start()
 
     # ------------------------------------------------------------------ build
     def _build_nav(self) -> QWidget:
@@ -154,6 +157,10 @@ class MainWindow(QMainWindow):
         self._settings_page.language_changed.connect(self._on_language_changed)
         self._settings_page.concurrency_changed.connect(self._queue.set_concurrency)
         self._settings_page.subscriptions_changed.connect(self._sync_subscription_timer)
+        self._settings_page.update_check_requested.connect(
+            lambda: self._updates.check(manual=True))
+        self._settings_page.update_mode_changed.connect(self._updates.sync_mode)
+        self._updates.status_changed.connect(self._settings_page.set_update_status)
 
         self._queue.job_added.connect(lambda _j: self._refresh_badge())
         self._queue.job_removed.connect(lambda _j: self._refresh_badge())
@@ -250,24 +257,10 @@ class MainWindow(QMainWindow):
         self._help_page.retranslate()
         self._refresh_badge()
 
-    def _check_updates(self, *, silent: bool) -> None:
-        worker = UpdateWorker()
-
-        def _done(info) -> None:
-            if info is None:
-                if not silent:
-                    self._toast.show_message(tr("ErrorWhileUpdating"))
-                return
-            if info.update_available:
-                QMessageBox.information(
-                    self, tr("NewVersionAvailable"),
-                    f"{tr('DoYouWantToUpdate')}\n\n{info.latest}\n{info.url}",
-                )
-            elif not silent:
-                self._toast.show_message(tr("UpToDate"))
-
-        worker.signals.ok.connect(_done)
-        self._pool.start(worker)
+    def _quit_for_update(self) -> None:
+        self._quitting = True
+        self._confirm_skipped = True
+        self.close()
 
     def _offer_restore(self) -> None:
         pending = self._queue.load_pending()
@@ -332,7 +325,8 @@ class MainWindow(QMainWindow):
             )
             return
 
-        if not self._quitting and self._settings.app.confirm_on_exit:
+        if (not self._quitting and not self._confirm_skipped
+                and self._settings.app.confirm_on_exit):
             key = "StillDownloadingSubscriptionsExit" if self._queue.active_count() else "AreYouSureExit"
             default = QMessageBox.No if self._queue.active_count() else QMessageBox.Yes
             reply = QMessageBox.question(
@@ -351,4 +345,5 @@ class MainWindow(QMainWindow):
         if self._tray:
             self._tray.hide()
         config.clean_temp_dir()
+        self._updates.install_pending_on_exit()
         super().closeEvent(event)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QThreadPool, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -23,7 +23,6 @@ from ... import __version__, config
 from ...core.settings import SettingsStore
 from ...i18n import available_locales, tr
 from ..widgets.common import heading
-from ..workers import UpdateWorker
 
 
 class SettingsPage(QWidget):
@@ -31,11 +30,12 @@ class SettingsPage(QWidget):
     language_changed = Signal(str)
     concurrency_changed = Signal(int)
     subscriptions_changed = Signal()
+    update_check_requested = Signal()
+    update_mode_changed = Signal()
 
     def __init__(self, settings: SettingsStore) -> None:
         super().__init__()
         self._settings = settings
-        self._pool = QThreadPool.globalInstance()
         self._build()
         self._load()
         self._wire()
@@ -113,17 +113,25 @@ class SettingsPage(QWidget):
         # -- general -------------------------------------------------
         self.save_options = QCheckBox(tr("SaveDownloadOptions"))
         self.confirm_exit = QCheckBox(tr("ConfirmExit"))
-        self.check_updates = QCheckBox(tr("CheckForUpdates"))
         general = QVBoxLayout()
         general.setSpacing(8)
-        for w in (self.save_options, self.confirm_exit, self.check_updates):
+        for w in (self.save_options, self.confirm_exit):
             general.addWidget(w)
+
+        self.update_mode = QComboBox()
+        self.update_mode.addItem(tr("UpdateModeAsk"), "ask")
+        self.update_mode.addItem(tr("UpdateModeAuto"), "auto")
+        self.update_mode.addItem(tr("UpdateModeOff"), "off")
+        mode_row = QFormLayout()
+        mode_row.addRow(QLabel(tr("UpdateMode")), self.update_mode)
+        general.addLayout(mode_row)
 
         upd_row = QHBoxLayout()
         self.update_btn = QPushButton(tr("CheckForUpdatesNow"))
         self.update_btn.setObjectName("Ghost")
         self.update_status = QLabel(f"v{__version__}")
         self.update_status.setObjectName("Dim")
+        self.update_status.setWordWrap(True)
         upd_row.addWidget(self.update_btn)
         upd_row.addWidget(self.update_status, 1)
         general.addLayout(upd_row)
@@ -148,7 +156,7 @@ class SettingsPage(QWidget):
         self.cookies.setCurrentIndex(max(0, self.cookies.findData(a.cookies_from_browser)))
         self.save_options.setChecked(a.save_download_options)
         self.confirm_exit.setChecked(a.confirm_on_exit)
-        self.check_updates.setChecked(a.check_for_updates)
+        self.update_mode.setCurrentIndex(max(0, self.update_mode.findData(a.update_mode)))
         self.save_dir.setText(a.save_directory)
         self.check_subs.setChecked(a.check_subscriptions)
         self.sub_interval.setValue(a.subscription_interval_minutes)
@@ -166,11 +174,10 @@ class SettingsPage(QWidget):
             lambda v: setattr(self._settings.app, "save_download_options", v))
         self.confirm_exit.toggled.connect(
             lambda v: setattr(self._settings.app, "confirm_on_exit", v))
-        self.check_updates.toggled.connect(
-            lambda v: setattr(self._settings.app, "check_for_updates", v))
+        self.update_mode.currentIndexChanged.connect(self._set_update_mode)
         self.check_subs.toggled.connect(self._set_check_subs)
         self.sub_interval.valueChanged.connect(self._set_sub_interval)
-        self.update_btn.clicked.connect(self.run_update_check)
+        self.update_btn.clicked.connect(self.update_check_requested)
         self.restore_btn.clicked.connect(self._restore)
 
     # ------------------------------------------------------------------ slots
@@ -204,24 +211,17 @@ class SettingsPage(QWidget):
         self._settings.app.language = code
         self.language_changed.emit(code)
 
-    def run_update_check(self) -> None:
-        self.update_status.setText(tr("Analyzing"))
-        worker = UpdateWorker()
-        worker.signals.ok.connect(self._on_update_info)
-        self._pool.start(worker)
+    def _set_update_mode(self, _index: int) -> None:
+        self._settings.app.update_mode = self.update_mode.currentData()
+        self.update_mode_changed.emit()
 
-    def _on_update_info(self, info) -> None:
-        if info is None:
-            self.update_status.setText(tr("ErrorWhileUpdating"))
-            return
-        if info.update_available:
-            self.update_status.setText(f"{tr('NewVersionAvailable')}: {info.latest} → {info.url}")
-        else:
-            self.update_status.setText(tr("UpToDate"))
+    def set_update_status(self, text: str) -> None:
+        self.update_status.setText(f"v{__version__} · {text}")
 
     def _restore(self) -> None:
         self._settings.restore_defaults()
         self._load()
+        self.update_mode_changed.emit()
         self.theme_changed.emit()
         self.language_changed.emit(self._settings.app.language)
 

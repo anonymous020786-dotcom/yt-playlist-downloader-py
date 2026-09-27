@@ -23,7 +23,7 @@ videos, convert them, tag them — rebuilt on **yt-dlp + FFmpeg** with a modern
 | **Queue survival** | Unfinished jobs are saved on exit and offered for resume next launch |
 | **Tray** | Minimises to the system tray while downloading; desktop notification when the queue finishes |
 | **UI** | Light / Dark / follow-system themes, 20+ accent colours, **14 fully-translated languages** incl. RTL for Arabic & Hebrew, Help page |
-| **Updates** | Checks the GitHub releases API and points you at the new version |
+| **Updates** | Checks GitHub releases; *Ask me* (update now / on exit / skip / later) or *Automatic* (downloads in the background, installs on exit). Windows installer and Linux AppImage self-update; macOS opens the new .dmg |
 | **Convenience** | Drag a link onto the window, paste button, live "Analyzing…" as you type, `Ctrl+1…6` / `Ctrl+L` shortcuts, remembers window size |
 
 ## Install & run
@@ -97,7 +97,7 @@ ytpdl/
     filenames.py       filename-template expansion + sanitising
     tagging.py         mutagen tag pass on finished audio
     subscriptions.py   subscription store + new-upload diffing
-    updater.py         GitHub release check
+    updater.py         GitHub release check, download + install
   ui/
     theme.py           light/dark QSS built from a palette + accent
     main_window.py     nav rail + stacked pages, tray, notifications, shortcuts
@@ -116,8 +116,11 @@ scripts/manual_*.py              headless smoke test / screenshots / a real down
 ## Notes on parity with the original
 
 * The original bundled its own `ffmpeg.exe`, an Inno Setup installer and an
-  on-exit self-updater. Here FFmpeg is an external dependency and "update" is a
-  notification + link (Python apps update via `pip` or a rebuilt bundle).
+  on-exit self-updater. Here FFmpeg is an external dependency. The self-updater
+  is back for the packaged builds: the release asset is downloaded, checked
+  against GitHub's sha256 digest, then run silently (Windows `Setup.exe
+  /SILENT /RELAUNCH=1`) or swapped in place (AppImage). Source / pip installs
+  just get a link to the release page.
 * yt-dlp replaces the hand-rolled `YoutubeExplode` stream selection and the manual
   FFmpeg process orchestration — quality/FPS/language preferences map onto its
   `format_sort`.

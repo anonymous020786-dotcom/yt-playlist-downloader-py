@@ -18,7 +18,7 @@ from ytpdl.i18n import translator
 from ytpdl.ui.theme import apply_theme
 
 settings = SettingsStore()
-settings.app.check_for_updates = False  # don't hit the network in the test
+settings.app.update_mode = "off"  # don't hit the network in the test
 settings.app.confirm_on_exit = False  # QMessageBox blocks under QT_QPA_PLATFORM=offscreen
 translator.set_locale(settings.app.language)
 apply_theme(app, settings.app.theme, settings.app.accent)

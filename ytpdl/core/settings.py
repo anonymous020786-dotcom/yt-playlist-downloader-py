@@ -22,6 +22,8 @@ from .. import config
 
 log = logging.getLogger(__name__)
 
+UPDATE_MODES = ("off", "ask", "auto")
+
 
 def _default_video_dir() -> str:
     for name in ("Videos", "Movies"):
@@ -84,7 +86,8 @@ class AppSettings:
     language: str = "en"
     save_directory: str = field(default_factory=_default_video_dir)
 
-    check_for_updates: bool = True
+    update_mode: str = "ask"  # "off" | "ask" | "auto"
+    skipped_version: str = ""  # a release the user chose to skip
     confirm_on_exit: bool = True
     save_download_options: bool = True
 
@@ -104,6 +107,12 @@ class AppSettings:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AppSettings:
+        data = dict(data)
+        # Settings from before update modes existed only had an on/off flag.
+        if "update_mode" not in data and "check_for_updates" in data:
+            data["update_mode"] = "ask" if data["check_for_updates"] else "off"
+        if data.get("update_mode") not in UPDATE_MODES:
+            data.pop("update_mode", None)
         return _coerce(cls, data)
 
 
